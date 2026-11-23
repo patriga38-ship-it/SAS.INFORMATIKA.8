@@ -1270,119 +1270,181 @@
       awayTimeoutId: null, // Timer real-time saat berada di luar tab > 2 detik
       lastViolationTimestamp: 0,
       disqualified: false,
+      isSubmittingExam: false, // Menandai proses selesai ujian agar blur/download tidak dianggap pelanggaran
 
       // Kamera, Mikrofon & Deteksi Wajah
       mediaStream: null,
       mediaRecorder: null,
       recordedChunks: [],
-      cameraAvailable: false,
+      cameraEnabled: false,
+      audioContext: null,
       faceCheckInterval: null,
-      faceMissingMs: 0,
-      isCameraMinimized: false,
+      faceMissingSeconds: 0,
+      lastVideoFrameData: null,
 
-      // Integrasi Spreadsheet
-      spreadsheetUrl: "https://script.google.com/macros/s/AKfycbzws1ebZ6eFJURPQNztEIAL2X0Cax6Tv4i8kC9-AmWxRD5RIDB3zQQVBVHZ9LKikVwq/exec",
-
-      // Audio Alarm Web Audio API
-      audioCtx: null
+      // Spreadsheet URL
+      spreadsheetUrl: localStorage.getItem("sas_spreadsheet_url") || ""
     };
 
     // =========================================================================
-    // 4. SISTEM ALARM SUARA KERAS PENGAWAS (MENEMBUS MODE SILENT VIA MEDIA STREAM)
+    // 4. INISIALISASI & PENDAFTARAN EVENT LISTENER UTAMA
     // =========================================================================
-    function initAudioContext() {
+    document.addEventListener("DOMContentLoaded", async () => {
+      document.getElementById("appsScriptCodeBox").value = GOOGLE_APPS_SCRIPT_TEMPLATE;
+      document.getElementById("spreadsheetUrlInput").value = state.spreadsheetUrl;
+
+      // Muat data peserta yang sudah selesai dari Firestore jika tersedia
       try {
-        if (!state.audioCtx) {
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          if (AudioContextClass) {
-            state.audioCtx = new AudioContextClass();
+        const fb = await window.__firebaseReady;
+        if (fb && fb.db) {
+          const snap = await fb.getDocs(fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "completed_exams"));
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (d.name && d.studentClass) {
+              state.completedRecords.push({
+                name: d.name.trim().toLowerCase(),
+                studentClass: d.studentClass.trim().toLowerCase()
+              });
+            }
+          });
+        }
+      } catch (e) {
+        // Fallback ke penyimpanan lokal jika offline
+      }
+
+      // Gabungkan juga dari localStorage perangkat
+      try {
+        const localSaved = JSON.parse(localStorage.getItem("sas_completed_students") || "[]");
+        localSaved.forEach(item => {
+          if (item.name && item.studentClass) {
+            state.completedRecords.push({
+              name: item.name.trim().toLowerCase(),
+              studentClass: item.studentClass.trim().toLowerCase()
+            });
           }
+        });
+      } catch (e) {}
+
+      setupEventListeners();
+      setupAntiCheatProtection();
+      setupDraggableCamera();
+    });
+
+    function setupEventListeners() {
+      // Modal Spreadsheet
+      document.getElementById("openSpreadsheetModalBtn").addEventListener("click", () => {
+        document.getElementById("spreadsheetModal").classList.remove("hidden");
+        document.getElementById("spreadsheetModal").classList.add("flex");
+      });
+
+      document.getElementById("closeSpreadsheetModalBtn").addEventListener("click", () => {
+        document.getElementById("spreadsheetModal").classList.add("hidden");
+        document.getElementById("spreadsheetModal").classList.remove("flex");
+      });
+
+      document.getElementById("saveSpreadsheetUrlBtn").addEventListener("click", () => {
+        const url = document.getElementById("spreadsheetUrlInput").value.trim();
+        state.spreadsheetUrl = url;
+        localStorage.setItem("sas_spreadsheet_url", url);
+        const status = document.getElementById("urlSaveStatus");
+        status.classList.remove("hidden");
+        setTimeout(() => status.classList.add("hidden"), 2500);
+      });
+
+      document.getElementById("copyAppsScriptBtn").addEventListener("click", () => {
+        const box = document.getElementById("appsScriptCodeBox");
+        box.select();
+        navigator.clipboard?.writeText(box.value);
+        document.getElementById("copyAppsScriptBtn").textContent = "✓ Tersalin";
+        setTimeout(() => {
+          document.getElementById("copyAppsScriptBtn").textContent = "Salin Kode";
+        }, 2000);
+      });
+
+      // Form Login Sekali Jalan
+      const startForm = document.getElementById("startExamForm");
+      const startBtn = document.getElementById("startExamSubmitBtn");
+      startForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        handleStartExam();
+      });
+      startBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        handleStartExam();
+      });
+
+      // Tombol Lanjutkan dari Blackout
+      document.getElementById("resumeFromBlackoutBtn").addEventListener("click", () => {
+        releaseBlackoutLock();
+      });
+
+      // Navigasi Soal & Laci Daftar Soal
+      document.getElementById("prevQuestionBtn").addEventListener("click", () => {
+        if (state.currentIdx > 0) {
+          state.currentIdx--;
+          renderCurrentQuestion();
         }
-        if (state.audioCtx && state.audioCtx.state === "suspended") {
-          state.audioCtx.resume();
+      });
+
+      document.getElementById("nextQuestionBtn").addEventListener("click", () => {
+        if (state.currentIdx < QUESTIONS.length - 1) {
+          state.currentIdx++;
+          renderCurrentQuestion();
         }
-      } catch (err) {}
+      });
+
+      document.getElementById("finishExamBtn").addEventListener("click", () => {
+        attemptManualSubmitExam();
+      });
+
+      document.getElementById("modalFinishExamBtn").addEventListener("click", () => {
+        closeQuestionGridModal();
+        attemptManualSubmitExam();
+      });
+
+      document.getElementById("toggleGridDrawerBtn").addEventListener("click", () => {
+        openQuestionGridModal();
+      });
+
+      document.getElementById("closeGridModalBtn").addEventListener("click", () => {
+        closeQuestionGridModal();
+      });
+
+      // Minimize kamera
+      document.getElementById("toggleCameraMinimizeBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const body = document.getElementById("cameraBodyWrap");
+        const btn = document.getElementById("toggleCameraMinimizeBtn");
+        if (body.classList.contains("hidden")) {
+          body.classList.remove("hidden");
+          btn.textContent = "—";
+        } else {
+          body.classList.add("hidden");
+          btn.textContent = "+";
+        }
+      });
+
+      // Halaman Hasil
+      document.getElementById("downloadCsvBtn").addEventListener("click", downloadStudentCsv);
+      document.getElementById("backToLoginBtn").addEventListener("click", resetToLoginPage);
     }
 
-    function playLoudSupervisorAlarm(isFinalExpulsion = false) {
-      try {
-        initAudioContext();
-        if (state.audioCtx) {
-          const ctx = state.audioCtx;
-          const now = ctx.currentTime;
-          const duration = isFinalExpulsion ? 2.6 : 1.5;
-
-          const osc1 = ctx.createOscillator();
-          const osc2 = ctx.createOscillator();
-          const gainNode = ctx.createGain();
-
-          osc1.type = "sawtooth";
-          osc2.type = "square";
-
-          const cycles = isFinalExpulsion ? 6 : 4;
-          for (let i = 0; i < cycles; i++) {
-            const t = now + (i * duration) / cycles;
-            osc1.frequency.setValueAtTime(980, t);
-            osc1.frequency.linearRampToValueAtTime(1480, t + duration / (cycles * 2));
-            osc2.frequency.setValueAtTime(740, t);
-            osc2.frequency.linearRampToValueAtTime(1120, t + duration / (cycles * 2));
-          }
-
-          gainNode.gain.setValueAtTime(1.0, now);
-          gainNode.gain.setValueAtTime(1.0, now + duration - 0.1);
-          gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
-
-          osc1.connect(gainNode);
-          osc2.connect(gainNode);
-          gainNode.connect(ctx.destination);
-
-          osc1.start(now);
-          osc2.start(now);
-          osc1.stop(now + duration);
-          osc2.stop(now + duration);
-        }
-
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-          const msg = new SpeechSynthesisUtterance(
-            isFinalExpulsion
-              ? "Perhatian pengawas! Siswa melakukan pelanggaran batas maksimal dan dikeluarkan dari ujian."
-              : "Perhatian pengawas! Terdeteksi pelanggaran ujian pada perangkat siswa."
-          );
-          msg.lang = "id-ID";
-          msg.volume = 1.0;
-          msg.rate = 1.05;
-          msg.pitch = 1.1;
-          window.speechSynthesis.speak(msg);
-        }
-
-        if (navigator.vibrate) {
-          navigator.vibrate([400, 150, 400, 150, 600]);
-        }
-      } catch (err) {}
-    }
-
     // =========================================================================
-    // 5. MODAL KUSTOM (PENGGANTI ALERT / CONFIRM)
+    // 5. MODAL KUSTOM & ALARM PENGAWAS
     // =========================================================================
-    function showCustomModal({ title, message, type = "warning", confirmText = "Saya Mengerti", cancelText = null, onConfirm = null }) {
+    function showCustomModal({ title, message, confirmText = "Saya Mengerti", cancelText = null, isDanger = false, onConfirm = null }) {
       const modal = document.getElementById("customModal");
-      const titleEl = document.getElementById("modalTitle");
-      const msgEl = document.getElementById("modalMessage");
+      const iconWrap = document.getElementById("modalIconWrap");
+      document.getElementById("modalTitle").textContent = title;
+      document.getElementById("modalMessage").textContent = message;
+
       const confirmBtn = document.getElementById("modalConfirmBtn");
       const cancelBtn = document.getElementById("modalCancelBtn");
-      const iconWrap = document.getElementById("modalIconWrap");
 
-      titleEl.textContent = title;
-      msgEl.textContent = message;
       confirmBtn.textContent = confirmText;
-
-      if (type === "danger") {
+      if (isDanger) {
         iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-red-100 text-red-600";
         confirmBtn.className = "w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
-      } else if (type === "success") {
-        iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-emerald-100 text-emerald-600";
-        confirmBtn.className = "w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
       } else {
         iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-amber-100 text-amber-600";
         confirmBtn.className = "w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
@@ -1398,279 +1460,278 @@
       modal.classList.remove("hidden");
       modal.classList.add("flex");
 
-      const closeModal = () => {
+      confirmBtn.onclick = () => {
         modal.classList.add("hidden");
         modal.classList.remove("flex");
-      };
-
-      confirmBtn.onclick = () => {
-        closeModal();
         if (typeof onConfirm === "function") onConfirm();
       };
 
       cancelBtn.onclick = () => {
-        closeModal();
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
       };
     }
 
+    function playLoudSupervisorAlarm(isFinal = false) {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        if (!state.audioContext) {
+          state.audioContext = new AudioCtx();
+        }
+        if (state.audioContext.state === "suspended") {
+          state.audioContext.resume();
+        }
+
+        const duration = isFinal ? 1.8 : 0.9;
+        const osc = state.audioContext.createOscillator();
+        const gain = state.audioContext.createGain();
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(880, state.audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, state.audioContext.currentTime + duration);
+
+        gain.gain.setValueAtTime(0.6, state.audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, state.audioContext.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(state.audioContext.destination);
+        osc.start();
+        osc.stop(state.audioContext.currentTime + duration);
+
+        if (navigator.vibrate) {
+          navigator.vibrate(isFinal ? [400, 150, 400, 150, 500] : [300, 100, 300]);
+        }
+      } catch (e) {}
+    }
+
     // =========================================================================
-    // 6. KAMERA, MIKROFON RINGAN & DETEKSI WAJAH 3 DETIK
+    // 6. PROSES LOGIN & INISIALISASI KAMERA PENGAWAS
     // =========================================================================
-    async function initCameraAndRecording() {
+    async function handleStartExam() {
+      if (state.isStarting || state.phase === "exam") return;
+
+      const nameInput = document.getElementById("studentName").value.trim();
+      const classInput = document.getElementById("studentClass").value.trim();
+      const agreed = document.getElementById("agreeRules").checked;
+
+      if (!nameInput) {
+        showCustomModal({ title: "Nama Wajib Diisi", message: "Silakan masukkan nama lengkap Anda terlebih dahulu." });
+        return;
+      }
+      if (!classInput) {
+        showCustomModal({ title: "Kelas Belum Dipilih", message: "Silakan pilih kelas Anda (8 A, 8 B, 8 C, atau 8 D)." });
+        return;
+      }
+      if (!agreed) {
+        showCustomModal({ title: "Persetujuan Tata Tertib", message: "Silakan centang kotak pernyataan siap mematuhi tata tertib ujian terlebih dahulu." });
+        return;
+      }
+
+      // Cek apakah kombinasi Nama + Kelas sudah pernah mengerjakan
+      const normName = nameInput.toLowerCase();
+      const normClass = classInput.toLowerCase();
+      const alreadyDone = state.completedRecords.some(
+        r => r.name === normName && r.studentClass === normClass
+      );
+
+      if (alreadyDone) {
+        showCustomModal({
+          title: "Akses Ditolak (Sudah Mengerjakan)",
+          message: `Peserta atas nama "${nameInput}" dari Kelas ${classInput} tercatat sudah menyelesaikan ujian ini.\n\nSetiap siswa hanya diperbolehkan mengerjakan 1 kali.`,
+          isDanger: true
+        });
+        return;
+      }
+
+      state.isStarting = true;
+      const btn = document.getElementById("startExamSubmitBtn");
+      const btnText = document.getElementById("startExamBtnText");
+      btn.disabled = true;
+      btnText.textContent = "MEMPERSIAPKAN RUANG UJIAN...";
+
+      state.studentName = nameInput;
+      state.studentClass = classInput;
+
+      // Aktifkan AudioContext saat interaksi pertama
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          state.audioContext = new AudioCtx();
+          if (state.audioContext.state === "suspended") await state.audioContext.resume();
+        }
+      } catch (e) {}
+
+      // Minta izin kamera & mikrofon tanpa memicu pelanggaran blur
+      state.isRequestingPermissions = true;
+      await initProctorCameraAndMic();
+
+      // Beri jeda transisi 2 detik agar popup izin browser tidak memicu pelanggaran blur
+      setTimeout(() => {
+        state.isRequestingPermissions = false;
+      }, 2000);
+
+      // Masuk ke layar ujian
+      state.phase = "exam";
+      state.answers = new Array(QUESTIONS.length).fill(null);
+      state.currentIdx = 0;
+      state.remainingSeconds = 90 * 60;
+      state.violations = 0;
+      state.violationLogs = [];
+      state.disqualified = false;
+      state.isSubmittingExam = false;
+
+      document.getElementById("headerStudentName").textContent = state.studentName;
+      document.getElementById("headerStudentClass").textContent = `Kelas ${state.studentClass} • Informatika`;
+      updateViolationUI();
+
+      document.getElementById("loginSection").classList.add("hidden");
+      const examSec = document.getElementById("examSection");
+      examSec.classList.remove("hidden");
+      examSec.classList.add("flex");
+
+      renderCurrentQuestion();
+      startExamTimer();
+      if (state.cameraEnabled) {
+        startFacePresenceDetection();
+      }
+    }
+
+    async function initProctorCameraAndMic() {
       const videoEl = document.getElementById("proctorVideo");
+      const fallbackEl = document.getElementById("cameraFallbackInfo");
       const statusLabel = document.getElementById("cameraStatusLabel");
       const recDot = document.getElementById("recIndicatorDot");
-      const fallbackInfo = document.getElementById("cameraFallbackInfo");
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Perangkat tidak mendukung API kamera/mikrofon.");
+          throw new Error("MediaDevices tidak didukung");
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user",
-            width: { ideal: 240, max: 320 },
-            height: { ideal: 320, max: 480 },
-            frameRate: { ideal: 10, max: 15 }
-          },
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true
-          }
+          video: { facingMode: "user", width: { ideal: 320 }, height: { ideal: 240 } },
+          audio: true
         });
 
         state.mediaStream = stream;
-        state.cameraAvailable = true;
-        
-        // Memaksa pemutaran video secara eksplisit agar menyala di HP
-        videoEl.srcObject = stream;
+        state.cameraEnabled = true;
+
         videoEl.muted = true;
         videoEl.playsInline = true;
+        videoEl.srcObject = stream;
         await videoEl.play().catch(() => {});
 
+        fallbackEl.classList.add("hidden");
         videoEl.classList.remove("hidden");
-        fallbackInfo.classList.add("hidden");
         statusLabel.textContent = "REC";
         recDot.className = "w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0";
 
-        startLightweightMediaRecorder(stream);
-        startFacePresenceDetection(videoEl);
+        // Mulai perekaman ringan
+        try {
+          state.recordedChunks = [];
+          const recorder = new MediaRecorder(stream);
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) state.recordedChunks.push(e.data);
+          };
+          recorder.start(2000);
+          state.mediaRecorder = recorder;
+        } catch (recErr) {}
       } catch (err) {
-        // Fallback Keringanan: Jika kamera bermasalah atau izin ditolak, tetap bisa ujian
-        console.warn("Kamera tidak dapat diakses, masuk ke mode keringanan:", err);
-        state.cameraAvailable = false;
+        // Mode keringanan jika kamera/mikrofon perangkat siswa bermasalah atau ditolak
+        state.cameraEnabled = false;
         videoEl.classList.add("hidden");
-        fallbackInfo.classList.remove("hidden");
+        fallbackEl.classList.remove("hidden");
         statusLabel.textContent = "OFF";
         recDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0";
       }
     }
 
-    function startLightweightMediaRecorder(stream) {
-      try {
-        if (typeof MediaRecorder === "undefined") return;
-        state.recordedChunks = [];
-        const mimeTypes = [
-          "video/webm;codecs=vp8,opus",
-          "video/webm",
-          "video/mp4"
-        ];
-        let selectedMime = "";
-        for (const m of mimeTypes) {
-          if (MediaRecorder.isTypeSupported(m)) {
-            selectedMime = m;
-            break;
-          }
-        }
+    // =========================================================================
+    // 7. DETEKSI WAJAH REAL-TIME (BATAS 1 DETIK) & KAMERA GESER
+    // =========================================================================
+    function startFacePresenceDetection() {
+      if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
+      const videoEl = document.getElementById("proctorVideo");
+      const warningOverlay = document.getElementById("faceWarningOverlay");
+      const countdownText = document.getElementById("faceCountdownText");
 
-        const options = {
-          videoBitsPerSecond: 120000,
-          audioBitsPerSecond: 24000
-        };
-        if (selectedMime) options.mimeType = selectedMime;
-
-        const recorder = new MediaRecorder(stream, options);
-        recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) {
-            state.recordedChunks.push(e.data);
-          }
-        };
-        recorder.start(5000);
-        state.mediaRecorder = recorder;
-      } catch (err) {}
-    }
-
-    function stopAndDownloadRecording() {
-      try {
-        if (state.faceCheckInterval) {
-          clearInterval(state.faceCheckInterval);
-          state.faceCheckInterval = null;
-        }
-
-        if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
-          state.mediaRecorder.onstop = () => {
-            if (state.recordedChunks.length > 0) {
-              const blob = new Blob(state.recordedChunks, { type: "video/webm" });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement("a");
-              const safeName = (state.studentName || "Siswa").replace(/[^a-zA-Z0-9]/g, "_");
-              a.href = url;
-              a.download = `Rekaman_SAS_Inf8_${safeName}_${state.studentClass.replace(/\s+/g, "")}.webm`;
-              document.body.appendChild(a);
-              a.click();
-              setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-              }, 1000);
-            }
-          };
-          state.mediaRecorder.stop();
-        }
-
-        if (state.mediaStream) {
-          state.mediaStream.getTracks().forEach((t) => t.stop());
-          state.mediaStream = null;
-        }
-      } catch (err) {}
-    }
-
-    function startFacePresenceDetection(videoEl) {
       const canvas = document.createElement("canvas");
       canvas.width = 64;
-      canvas.height = 80;
+      canvas.height = 48;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      let prevFrame = null;
-      const overlay = document.getElementById("faceWarningOverlay");
-      const countdownEl = document.getElementById("faceCountdownText");
 
-      state.faceMissingMs = 0;
-      if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
+      state.faceMissingSeconds = 0;
 
-      // Pengecekan dipercepat setiap 500ms (0.5 detik) agar sensor lebih responsif
-      state.faceCheckInterval = setInterval(async () => {
-        if (state.phase !== "exam" || !state.cameraAvailable) return;
+      state.faceCheckInterval = setInterval(() => {
+        if (state.phase !== "exam" || !state.cameraEnabled || state.isSubmittingExam || state.isRequestingPermissions) {
+          warningOverlay.classList.add("hidden");
+          return;
+        }
+
         if (videoEl.readyState < 2) return;
 
-        let faceDetected = false;
-
         try {
-          if ("FaceDetector" in window) {
-            const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
-            const faces = await detector.detect(videoEl);
-            faceDetected = faces && faces.length > 0;
-          } else {
-            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-            const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            let centerSkinPixels = 0;
-            let totalCenterPixels = 0;
-            let brightnessSum = 0;
-            let brightnessSqSum = 0;
-            let motionDiff = 0;
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
-            for (let y = 0; y < canvas.height; y++) {
-              for (let x = 0; x < canvas.width; x++) {
-                const i = (y * canvas.width + x) * 4;
-                const r = frame[i];
-                const g = frame[i + 1];
-                const b = frame[i + 2];
-                const lum = (r + g + b) / 3;
-                brightnessSum += lum;
-                brightnessSqSum += lum * lum;
+          // Analisis area tengah (wajah siswa) untuk kontras dan warna kulit/kehadiran
+          let skinPixels = 0;
+          let brightnessSum = 0;
+          let brightnessSqSum = 0;
+          let centerPixels = 0;
 
-                // Fokus deteksi pada area tengah frame tempat posisi wajah berada
-                const isCenterZone = x >= 12 && x <= 52 && y >= 10 && y <= 70;
-                if (isCenterZone) {
-                  totalCenterPixels++;
-                  if (
-                    r > 60 && g > 35 && b > 20 &&
-                    r > g && r > b &&
-                    Math.abs(r - g) > 12 &&
-                    (Math.max(r, g, b) - Math.min(r, g, b)) > 15
-                  ) {
-                    centerSkinPixels++;
-                  }
-                }
+          for (let y = 10; y < 38; y++) {
+            for (let x = 16; x < 48; x++) {
+              const i = (y * canvas.width + x) * 4;
+              const r = imgData[i];
+              const g = imgData[i + 1];
+              const b = imgData[i + 2];
+              const lum = 0.299 * r + 0.587 * g + 0.114 * b;
 
-                if (prevFrame) {
-                  motionDiff += Math.abs(r - prevFrame[i]);
-                }
+              brightnessSum += lum;
+              brightnessSqSum += lum * lum;
+              centerPixels++;
+
+              if (r > 60 && g > 35 && b > 20 && r > g && r > b && Math.abs(r - g) > 10) {
+                skinPixels++;
               }
             }
+          }
 
-            prevFrame = new Uint8ClampedArray(frame);
-            const totalPixels = canvas.width * canvas.height;
-            const avgBrightness = brightnessSum / totalPixels;
-            const variance = (brightnessSqSum / totalPixels) - (avgBrightness * avgBrightness);
-            const centerSkinRatio = totalCenterPixels > 0 ? (centerSkinPixels / totalCenterPixels) : 0;
+          const meanLum = brightnessSum / centerPixels;
+          const variance = (brightnessSqSum / centerPixels) - (meanLum * meanLum);
+          const stdDev = Math.sqrt(Math.max(0, variance));
 
-            // Pastikan kamera tidak tertutup jari/gelap (avgBrightness > 28),
-            // bukan dinding polos (variance > 180), dan ada wajah di tengah atau gerakan nyata
-            if (
-              avgBrightness > 28 &&
-              avgBrightness < 245 &&
-              variance > 180 &&
-              (centerSkinRatio > 0.14 || (centerSkinRatio > 0.08 && motionDiff > 1800))
-            ) {
-              faceDetected = true;
+          // Wajah dianggap tidak terdeteksi jika kamera tertutup (gelap/polos) atau tidak ada fitur wajah
+          const isFacePresent = stdDev > 12 && meanLum > 20 && meanLum < 245 && skinPixels > 25;
+
+          if (!isFacePresent) {
+            state.faceMissingSeconds += 0.5;
+            warningOverlay.classList.remove("hidden");
+            countdownText.textContent = Math.max(0, Math.ceil(1.5 - state.faceMissingSeconds));
+
+            if (state.faceMissingSeconds > 1.0) {
+              state.faceMissingSeconds = 0;
+              warningOverlay.classList.add("hidden");
+              registerViolation("Wajah tidak terdeteksi di layar perekaman selama lebih dari 1 detik");
             }
+          } else {
+            state.faceMissingSeconds = 0;
+            warningOverlay.classList.add("hidden");
           }
-        } catch (err) {
-          faceDetected = true;
-        }
-
-        if (faceDetected) {
-          state.faceMissingMs = 0;
-          overlay.classList.add("hidden");
-        } else {
-          state.faceMissingMs += 500;
-          const sisa = Math.max(0, Math.ceil((1000 - state.faceMissingMs) / 1000));
-          countdownEl.textContent = sisa;
-          overlay.classList.remove("hidden");
-
-          // Jika lebih dari 1 detik (1000ms) wajah tidak terdeteksi, alarm langsung menyala
-          if (state.faceMissingMs > 1000) {
-            state.faceMissingMs = 0;
-            overlay.classList.add("hidden");
-            registerViolation("Wajah tidak terdeteksi di layar perekaman lebih dari 1 detik");
-          }
-        }
+        } catch (e) {}
       }, 500);
     }
 
-    // =========================================================================
-    // 7. JENDELA KAMERA FLEKSIBEL (DRAGGABLE TOUCH & MOUSE)
-    // =========================================================================
     function setupDraggableCamera() {
       const box = document.getElementById("floatingCameraBox");
-      const minBtn = document.getElementById("toggleCameraMinimizeBtn");
-      const bodyWrap = document.getElementById("cameraBodyWrap");
-
-      minBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        state.isCameraMinimized = !state.isCameraMinimized;
-        if (state.isCameraMinimized) {
-          bodyWrap.classList.add("hidden");
-          box.style.width = "76px";
-          minBtn.textContent = "+";
-        } else {
-          bodyWrap.classList.remove("hidden");
-          box.style.width = "86px";
-          minBtn.textContent = "—";
-        }
-      });
-
       let isDragging = false;
-      let startX = 0;
-      let startY = 0;
-      let initialLeft = 0;
-      let initialTop = 0;
+      let startX = 0, startY = 0, initialLeft = 0, initialTop = 0;
 
-      const onDragStart = (clientX, clientY) => {
+      const onStart = (clientX, clientY) => {
         isDragging = true;
         const rect = box.getBoundingClientRect();
-        box.style.right = "auto";
         box.style.bottom = "auto";
+        box.style.right = "auto";
         box.style.left = rect.left + "px";
         box.style.top = rect.top + "px";
         startX = clientX;
@@ -1679,266 +1740,211 @@
         initialTop = rect.top;
       };
 
-      const onDragMove = (clientX, clientY) => {
+      const onMove = (clientX, clientY) => {
         if (!isDragging) return;
         const dx = clientX - startX;
         const dy = clientY - startY;
-        const maxLeft = window.innerWidth - box.offsetWidth - 4;
-        const maxTop = window.innerHeight - box.offsetHeight - 4;
-        const nextLeft = Math.min(Math.max(4, initialLeft + dx), Math.max(4, maxLeft));
-        const nextTop = Math.min(Math.max(4, initialTop + dy), Math.max(4, maxTop));
-        box.style.left = nextLeft + "px";
-        box.style.top = nextTop + "px";
+        const maxLeft = window.innerWidth - box.offsetWidth;
+        const maxTop = window.innerHeight - box.offsetHeight;
+        const newLeft = Math.min(Math.max(0, initialLeft + dx), Math.max(0, maxLeft));
+        const newTop = Math.min(Math.max(0, initialTop + dy), Math.max(0, maxTop));
+        box.style.left = newLeft + "px";
+        box.style.top = newTop + "px";
       };
 
-      const onDragEnd = () => {
+      const onEnd = () => {
         isDragging = false;
       };
 
-      box.addEventListener("mousedown", (e) => {
-        if (e.target === minBtn) return;
-        onDragStart(e.clientX, e.clientY);
-      });
-      window.addEventListener("mousemove", (e) => onDragMove(e.clientX, e.clientY));
-      window.addEventListener("mouseup", onDragEnd);
-
       box.addEventListener("touchstart", (e) => {
-        if (e.target === minBtn) return;
-        if (e.touches.length === 1) {
-          onDragStart(e.touches[0].clientX, e.touches[0].clientY);
-        }
+        if (e.target.id === "toggleCameraMinimizeBtn") return;
+        const t = e.touches[0];
+        onStart(t.clientX, t.clientY);
       }, { passive: true });
+
       window.addEventListener("touchmove", (e) => {
-        if (isDragging && e.touches.length === 1) {
-          onDragMove(e.touches[0].clientX, e.touches[0].clientY);
-        }
+        if (!isDragging) return;
+        const t = e.touches[0];
+        onMove(t.clientX, t.clientY);
       }, { passive: true });
-      window.addEventListener("touchend", onDragEnd);
+
+      window.addEventListener("touchend", onEnd);
+
+      box.addEventListener("mousedown", (e) => {
+        if (e.target.id === "toggleCameraMinimizeBtn") return;
+        onStart(e.clientX, e.clientY);
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!isDragging) return;
+        onMove(e.clientX, e.clientY);
+      });
+
+      window.addEventListener("mouseup", onEnd);
     }
 
     // =========================================================================
-    // 8. SISTEM ANTI-KECURANGAN (SCREENSHOT, 3 JARI, KELUAR TAB > 2 DETIK)
+    // 8. SISTEM ANTI-KECURANGAN & PELANGGARAN
     // =========================================================================
-    function triggerBlackoutLock(reasonText) {
-      const app = document.getElementById("mainAppContainer");
-      const blackout = document.getElementById("blackoutScreen");
-      const reasonEl = document.getElementById("blackoutReason");
-
-      app.classList.add("privacy-shield-active");
-      reasonEl.textContent = reasonText;
-      blackout.classList.remove("hidden");
-      blackout.classList.add("flex");
-    }
-
-    function releaseBlackoutLock() {
-      const app = document.getElementById("mainAppContainer");
-      const blackout = document.getElementById("blackoutScreen");
-      app.classList.remove("privacy-shield-active");
-      blackout.classList.add("hidden");
-      blackout.classList.remove("flex");
-    }
-
     function registerViolation(reason) {
-      if (state.phase !== "exam") return;
+      if (state.phase !== "exam" || state.isSubmittingExam || state.isRequestingPermissions) return;
 
       const now = Date.now();
-      if (now - state.lastViolationTimestamp < 2500) return;
+      if (now - state.lastViolationTimestamp < 2500) return; // Cooldown 2.5 detik agar tidak dobel
       state.lastViolationTimestamp = now;
 
       state.violations++;
-      const timeLabel = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-      state.violationLogs.push(`[${timeLabel}] Pelanggaran #${state.violations}: ${reason}`);
-
-      const countText = document.getElementById("violationCountText");
-      const dot = document.getElementById("violationDot");
-      const badge = document.getElementById("violationBadge");
-
-      countText.textContent = `${state.violations}/${state.maxViolations}`;
-      countText.className = "text-red-400";
-      dot.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
-      badge.classList.add("violation-pulse", "border-red-500");
+      const timeStr = new Date().toLocaleTimeString("id-ID");
+      state.violationLogs.push(`[${timeStr}] Pelanggaran ke-${state.violations}: ${reason}`);
+      updateViolationUI();
 
       if (state.violations >= state.maxViolations) {
         playLoudSupervisorAlarm(true);
         state.disqualified = true;
-        releaseBlackoutLock();
-
-        showCustomModal({
-          title: "PELANGGARAN BATAS MAKSIMAL (4x)!",
-          message:
-            "KAMU DIKELUARKAN DARI APLIKASI KARENA TELAH MELAKUKAN PELANGGARAN DI BATAS MAKSIMAL TETAPI JAWABANMU TETAP DIREKAM DAN DINILAI SERTA DISIMPAN.",
-          type: "danger",
-          confirmText: "LIHAT HASIL & PELANGGARAN",
-          onConfirm: () => {
-            finalizeAndSubmitExam(true);
-          }
-        });
-
-        setTimeout(() => {
-          if (state.phase === "exam") {
-            const modal = document.getElementById("customModal");
-            modal.classList.add("hidden");
-            modal.classList.remove("flex");
-            finalizeAndSubmitExam(true);
-          }
-        }, 4500);
+        finalizeAndSubmitExam(true);
       } else {
         playLoudSupervisorAlarm(false);
-        const sisaKesempatan = state.maxViolations - state.violations;
         showCustomModal({
-          title: `PERINGATAN PELANGGARAN KE-${state.violations} DARI 3!`,
-          message:
-            `Pelanggaran terdeteksi:\n"${reason}"\n\n` +
-            `Aplikasi tidak dapat dikeluarkan sebelum seluruh soal selesai dikerjakan.\n` +
-            `Sisa toleransi peringatan: ${sisaKesempatan - 1}x sebelum Anda otomatis dikeluarkan pada pelanggaran ke-4!`,
-          type: "danger",
-          confirmText: "KEMBALI KE SOAL UJIAN"
+          title: `⚠️ PERINGATAN PELANGGARAN (${state.violations}/${state.maxViolations})`,
+          message: `Terdeteksi pelanggaran:\n"${reason}"\n\nSisa kesempatan: ${state.maxViolations - state.violations} kali lagi sebelum Anda otomatis dikeluarkan dari ujian!`,
+          isDanger: true
         });
       }
     }
 
-    function setupAntiCheatListeners() {
-      document.addEventListener("contextmenu", (e) => {
-        if (state.phase !== "login") {
-          e.preventDefault();
-        }
-      });
+    function updateViolationUI() {
+      const textEl = document.getElementById("violationCountText");
+      const dotEl = document.getElementById("violationDot");
+      const badgeEl = document.getElementById("violationBadge");
 
-      document.addEventListener("copy", (e) => {
-        if (state.phase !== "login") {
-          e.preventDefault();
-          if (e.clipboardData) e.clipboardData.setData("text/plain", "");
-        }
-      });
+      textEl.textContent = `${state.violations}/${state.maxViolations}`;
+      if (state.violations === 0) {
+        textEl.className = "text-emerald-400";
+        dotEl.className = "w-2 h-2 rounded-full bg-emerald-400";
+        badgeEl.classList.remove("violation-pulse", "border-red-500");
+      } else {
+        textEl.className = "text-red-400";
+        dotEl.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
+        badgeEl.classList.add("violation-pulse", "border-red-500");
+      }
+    }
 
+    function triggerBlackoutLock(reasonText) {
+      if (state.phase !== "exam" || state.isSubmittingExam || state.isRequestingPermissions) return;
+      const screen = document.getElementById("blackoutScreen");
+      document.getElementById("blackoutReason").textContent = reasonText;
+      screen.classList.remove("hidden");
+      screen.classList.add("flex");
+    }
+
+    function releaseBlackoutLock() {
+      const screen = document.getElementById("blackoutScreen");
+      screen.classList.add("hidden");
+      screen.classList.remove("flex");
+    }
+
+    function setupAntiCheatProtection() {
+      // Deteksi sentuhan 3 jari (gesture screenshot Android/iOS)
       document.addEventListener("touchstart", (e) => {
-        if (state.phase === "exam") {
-          if (e.touches && e.touches.length >= 3) {
-            triggerBlackoutLock("Terdeteksi sentuhan 3 jari (percobaan screenshot). Layar dikunci!");
-            registerViolation("Percobaan screenshot menggunakan gestur 3 jari");
-          }
-        } else if (state.phase === "result") {
-          if (e.touches && e.touches.length >= 3) {
-            forceReturnToLoginOnResultScreenshot("Terdeteksi sentuhan 3 jari di halaman jawaban!");
+        if (state.isSubmittingExam || state.isRequestingPermissions) return;
+        if (e.touches && e.touches.length >= 3) {
+          if (state.phase === "exam") {
+            triggerBlackoutLock("Terdeteksi sentuhan 3 jari (percobaan screenshot)!");
+            registerViolation("Percobaan tangkapan layar (sentuhan 3 jari)");
+          } else if (state.phase === "result") {
+            forceReturnToLoginOnResultScreenshot("Percobaan tangkapan layar (3 jari) di halaman hasil!");
           }
         }
       }, { passive: true });
 
+      // Deteksi tombol PrintScreen / Ctrl+P / Ctrl+S / Ctrl+C
       document.addEventListener("keydown", (e) => {
-        const key = e.key || "";
-        const isScreenshotKey =
-          key === "PrintScreen" ||
-          e.keyCode === 44 ||
-          (e.metaKey && e.shiftKey) ||
-          (e.ctrlKey && e.shiftKey && (key.toLowerCase() === "s" || key.toLowerCase() === "i")) ||
-          (e.ctrlKey && (key.toLowerCase() === "p" || key.toLowerCase() === "u" || key.toLowerCase() === "s"));
-
-        if (state.phase === "exam") {
-          if (isScreenshotKey || key === "AudioVolumeDown" || key === "AudioVolumeUp") {
-            e.preventDefault();
-            try { navigator.clipboard.writeText(""); } catch (err) {}
-            triggerBlackoutLock("Tombol fisik / shortcut screenshot terdeteksi dan diblokir!");
-            registerViolation("Percobaan screenshot atau menekan kombinasi tombol perangkat");
-          }
-        } else if (state.phase === "result") {
-          if (isScreenshotKey || key === "AudioVolumeDown" || key === "AudioVolumeUp") {
-            e.preventDefault();
-            forceReturnToLoginOnResultScreenshot("Percobaan screenshot halaman jawaban terdeteksi!");
+        if (state.isSubmittingExam) return;
+        if (
+          e.key === "PrintScreen" ||
+          (e.ctrlKey && ["p", "s", "c", "u"].includes(e.key.toLowerCase()))
+        ) {
+          e.preventDefault();
+          if (state.phase === "exam") {
+            triggerBlackoutLock("Tombol tangkapan layar / salin halaman dilarang!");
+            registerViolation("Menekan tombol terlarang / PrintScreen");
+          } else if (state.phase === "result") {
+            forceReturnToLoginOnResultScreenshot("Percobaan tangkapan layar di halaman hasil!");
           }
         }
       });
 
-      document.addEventListener("keyup", (e) => {
-        if (e.key === "PrintScreen" || e.keyCode === 44) {
-          if (state.phase === "exam") {
-            triggerBlackoutLock("Tangkapan layar (PrintScreen) diblokir sistem!");
-            registerViolation("Percobaan screenshot layar soal");
-          } else if (state.phase === "result") {
-            forceReturnToLoginOnResultScreenshot("Percobaan screenshot halaman jawaban!");
-          }
+      // Blokir klik kanan
+      document.addEventListener("contextmenu", (e) => {
+        if (state.phase === "exam" || state.phase === "result") {
+          e.preventDefault();
         }
       });
 
       document.addEventListener("visibilitychange", () => {
-        if (state.isRequestingPermissions) return; // Skip deteksi blur saat minta izin
-        if (state.phase === "exam") {
-          if (document.hidden) {
-            if (!state.hiddenStartTime) {
-              state.hiddenStartTime = Date.now();
-              triggerBlackoutLock("Anda meninggalkan layar ujian! Alarm akan menyala otomatis jika lebih dari 2 detik.");
-              clearTimeout(state.awayTimeoutId);
-              // Alarm langsung menyala saat berada di luar tab > 2 detik (tanpa menunggu siswa kembali)
-              state.awayTimeoutId = setTimeout(() => {
-                if (state.phase === "exam" && (document.hidden || state.hiddenStartTime)) {
-                  registerViolation("Berada di luar tab / aplikasi ujian lebih dari 2 detik");
-                }
-              }, 2050);
-            }
-          } else {
+        if (state.isRequestingPermissions || state.isSubmittingExam) return; // Skip deteksi saat minta izin / selesai ujian
+
+        if (document.hidden) {
+          if (state.phase === "exam") {
+            state.hiddenStartTime = Date.now();
+            triggerBlackoutLock("Anda meninggalkan layar aplikasi ujian! Segera kembali dalam 2 detik.");
+
+            if (state.awayTimeoutId) clearTimeout(state.awayTimeoutId);
+            state.awayTimeoutId = setTimeout(() => {
+              if (document.hidden && state.phase === "exam" && !state.isSubmittingExam && !state.isRequestingPermissions) {
+                registerViolation("Meninggalkan aplikasi/tab ujian lebih dari 2 detik");
+              }
+            }, 2000);
+          } else if (state.phase === "result") {
+            forceReturnToLoginOnResultScreenshot("Meninggalkan layar halaman hasil (indikasi screenshot/split screen)!");
+          }
+        } else {
+          if (state.awayTimeoutId) {
             clearTimeout(state.awayTimeoutId);
             state.awayTimeoutId = null;
-            state.hiddenStartTime = null;
           }
-        } else if (state.phase === "result" && document.hidden) {
-          forceReturnToLoginOnResultScreenshot("Keluar layar / percobaan tangkapan layar saat melihat kunci jawaban!");
-        }
-      });
-
-      window.addEventListener("blur", () => {
-        if (state.isRequestingPermissions) return; // Skip deteksi blur saat minta izin
-        if (state.phase === "exam") {
-          if (!state.hiddenStartTime) {
-            state.hiddenStartTime = Date.now();
-            clearTimeout(state.awayTimeoutId);
-            // Alarm langsung menyala jika jendela tidak fokus > 2 detik
-            state.awayTimeoutId = setTimeout(() => {
-              if (state.phase === "exam" && state.hiddenStartTime) {
-                registerViolation("Keluar aplikasi / membuka jendela lain lebih dari 2 detik");
-              }
-            }, 2050);
-          }
-          triggerBlackoutLock("Fokus aplikasi terganggu (notifikasi / split screen / tombol power+volume).");
-        } else if (state.phase === "result") {
-          forceReturnToLoginOnResultScreenshot("Terdeteksi gangguan layar / tombol screenshot pada halaman kunci jawaban!");
-        }
-      });
-
-      window.addEventListener("focus", () => {
-        if (state.isRequestingPermissions) return;
-        if (state.phase === "exam") {
-          clearTimeout(state.awayTimeoutId);
-          state.awayTimeoutId = null;
           state.hiddenStartTime = null;
         }
       });
 
-      window.addEventListener("popstate", () => {
+      window.addEventListener("blur", () => {
+        if (state.isRequestingPermissions || state.isSubmittingExam) return;
+
         if (state.phase === "exam") {
-          history.pushState(null, "", location.href);
-          registerViolation("Mencoba menekan tombol Kembali untuk keluar dari ujian");
+          triggerBlackoutLock("Fokus layar terdeteksi berpindah atau membuka jendela lain!");
+          if (!state.awayTimeoutId) {
+            state.awayTimeoutId = setTimeout(() => {
+              if (!document.hasFocus() && state.phase === "exam" && !state.isSubmittingExam && !state.isRequestingPermissions) {
+                registerViolation("Layar kehilangan fokus / membuka jendela mengambang lebih dari 2 detik");
+              }
+            }, 2000);
+          }
+        } else if (state.phase === "result") {
+          forceReturnToLoginOnResultScreenshot("Layar hasil kehilangan fokus (indikasi screenshot)!");
         }
       });
 
-      document.getElementById("resumeFromBlackoutBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        releaseBlackoutLock();
+      window.addEventListener("focus", () => {
+        if (state.awayTimeoutId) {
+          clearTimeout(state.awayTimeoutId);
+          state.awayTimeoutId = null;
+        }
       });
     }
 
     function forceReturnToLoginOnResultScreenshot(reason) {
-      if (state.phase !== "result") return;
+      if (state.phase !== "result" || state.isSubmittingExam) return;
       playLoudSupervisorAlarm(false);
       resetToLoginPage();
       showCustomModal({
-        title: "KEAMANAN HALAMAN HASIL AKTIF",
-        message: `${reason}\n\nDemi menjaga kerahasiaan soal dan kunci jawaban, Anda otomatis dikembalikan ke halaman login.`,
-        type: "danger",
-        confirmText: "MENGERTI"
+        title: "Halaman Hasil Dikunci!",
+        message: `${reason}\n\nDemi keamanan soal, Anda dikembalikan ke halaman login.`,
+        isDanger: true
       });
     }
 
     // =========================================================================
-    // 9. TIMER UJIAN (90 MENIT) & RENDER SOAL
+    // 9. RENDER SOAL, NAVIGASI & PENGUMPULAN JAWABAN
     // =========================================================================
     function startExamTimer() {
       if (state.timerInterval) clearInterval(state.timerInterval);
@@ -1951,21 +1957,7 @@
 
         if (state.remainingSeconds <= 0) {
           clearInterval(state.timerInterval);
-          showCustomModal({
-            title: "WAKTU UJIAN HABIS!",
-            message: "Durasi pengerjaan 90 menit telah berakhir. Seluruh jawaban Anda otomatis dikumpulkan dan dinilai.",
-            type: "warning",
-            confirmText: "LIHAT HASIL NILAI",
-            onConfirm: () => finalizeAndSubmitExam(false)
-          });
-          setTimeout(() => {
-            if (state.phase === "exam") {
-              const modal = document.getElementById("customModal");
-              modal.classList.add("hidden");
-              modal.classList.remove("flex");
-              finalizeAndSubmitExam(false);
-            }
-          }, 3000);
+          finalizeAndSubmitExam(false);
         }
       }, 1000);
     }
@@ -1973,83 +1965,62 @@
     function updateTimerDisplay() {
       const mins = Math.floor(Math.max(0, state.remainingSeconds) / 60);
       const secs = Math.max(0, state.remainingSeconds) % 60;
-      const formatted = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-      const el = document.getElementById("timerDisplay");
-      el.textContent = formatted;
-
+      const disp = document.getElementById("timerDisplay");
+      disp.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
       if (state.remainingSeconds <= 300) {
-        el.className = "font-mono font-extrabold text-sm tracking-wider text-red-400 animate-pulse";
-      } else {
-        el.className = "font-mono font-extrabold text-sm tracking-wider text-amber-300";
+        disp.classList.remove("text-amber-300");
+        disp.classList.add("text-red-400", "animate-pulse");
       }
     }
 
     function renderCurrentQuestion() {
-      const idx = state.currentIdx;
-      const item = QUESTIONS[idx];
-      const letters = ["A", "B", "C", "D"];
+      const qObj = QUESTIONS[state.currentIdx];
+      document.getElementById("questionNumberBadge").textContent = `Soal No. ${state.currentIdx + 1}`;
+      document.getElementById("questionBabLabel").textContent = qObj.bab;
+      document.getElementById("questionText").textContent = qObj.q;
 
-      document.getElementById("questionNumberBadge").textContent = `Soal No. ${idx + 1}`;
-      document.getElementById("questionBabLabel").textContent = item.bab;
-      document.getElementById("questionText").textContent = item.q;
+      const answeredCount = state.answers.filter(a => a !== null).length;
+      document.getElementById("answeredCountBadge").textContent = `${answeredCount}/${QUESTIONS.length}`;
 
       const optionsContainer = document.getElementById("optionsContainer");
       optionsContainer.innerHTML = "";
+      const letters = ["A", "B", "C", "D"];
 
-      item.options.forEach((optText, optIdx) => {
-        const isSelected = state.answers[idx] === optIdx;
+      qObj.options.forEach((optText, idx) => {
+        const isSelected = state.answers[state.currentIdx] === idx;
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.setAttribute("data-opt-idx", String(optIdx));
-        btn.className = isSelected
-          ? "option-choice-btn w-full text-left p-3.5 rounded-2xl border-2 border-blue-600 bg-blue-50/90 text-blue-950 font-semibold shadow-sm transition flex items-start gap-3 cursor-pointer active:scale-[0.99]"
-          : "option-choice-btn w-full text-left p-3.5 rounded-2xl border-2 border-slate-200 hover:border-blue-300 hover:bg-slate-50 text-slate-800 font-medium transition flex items-start gap-3 cursor-pointer active:scale-[0.99]";
+        btn.className = `option-choice-btn w-full text-left p-3.5 rounded-2xl border-2 transition flex items-start gap-3 cursor-pointer ${
+          isSelected
+            ? "border-blue-600 bg-blue-50/90 text-blue-950 shadow-sm"
+            : "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50 text-slate-800"
+        }`;
 
         btn.innerHTML = `
-          <span class="pointer-events-none w-7 h-7 rounded-xl shrink-0 flex items-center justify-center font-extrabold text-xs ${
+          <span class="w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${
             isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"
-          }">${letters[optIdx]}</span>
-          <span class="pointer-events-none text-xs leading-relaxed pt-1">${optText}</span>
+          }">
+            ${letters[idx]}
+          </span>
+          <span class="text-xs sm:text-sm font-medium leading-snug pt-0.5">${optText}</span>
         `;
-        btn.onclick = () => {
-          state.answers[state.currentIdx] = optIdx;
+
+        btn.addEventListener("click", () => {
+          state.answers[state.currentIdx] = idx;
           renderCurrentQuestion();
-        };
+        });
+
         optionsContainer.appendChild(btn);
       });
 
+      // Atur tombol Sebelumnya / Selanjutnya / Selesai
       const prevBtn = document.getElementById("prevQuestionBtn");
       const nextBtn = document.getElementById("nextQuestionBtn");
       const finishBtn = document.getElementById("finishExamBtn");
-      const modalFinishBtn = document.getElementById("modalFinishExamBtn");
 
-      prevBtn.disabled = idx === 0;
+      prevBtn.disabled = state.currentIdx === 0;
 
-      // Hitung jumlah soal yang sudah terjawab
-      const answeredCount = state.answers.filter((a) => a !== null).length;
-      const isAllAnswered = answeredCount === QUESTIONS.length;
-      document.getElementById("answeredCountBadge").textContent = `${answeredCount}/${QUESTIONS.length}`;
-
-      // TOMBOL SELESAI SELALU AKTIF (Bisa diklik walau belum lengkap)
-      finishBtn.disabled = false;
-      modalFinishBtn.disabled = false;
-
-      if (isAllAnswered) {
-        finishBtn.className = "flex-1 py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow shadow-emerald-600/25 transition flex items-center justify-center gap-1 cursor-pointer";
-        finishBtn.innerHTML = `<span>✓ Selesai Ujian</span>`;
-
-        modalFinishBtn.className = "w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition cursor-pointer";
-        modalFinishBtn.innerHTML = `✓ Selesai & Kumpulkan Semua Jawaban`;
-      } else {
-        finishBtn.className = "flex-1 py-3 px-3 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold text-xs shadow transition flex items-center justify-center gap-1 cursor-pointer";
-        finishBtn.innerHTML = `<span>Selesai (${answeredCount}/50)</span>`;
-
-        modalFinishBtn.className = "w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow transition cursor-pointer";
-        modalFinishBtn.innerHTML = `Selesai & Kumpulkan (${answeredCount}/50 Terjawab)`;
-      }
-
-      // Tampilkan tombol selesai HANYA di nomor terakhir (Soal 50)
-      if (idx === QUESTIONS.length - 1) {
+      if (state.currentIdx === QUESTIONS.length - 1) {
         nextBtn.classList.add("hidden");
         finishBtn.classList.remove("hidden");
         finishBtn.classList.add("flex");
@@ -2058,46 +2029,39 @@
         finishBtn.classList.add("hidden");
         finishBtn.classList.remove("flex");
       }
-
-      renderQuestionGrid();
-    }
-
-    function renderQuestionGrid() {
-      const grid = document.getElementById("questionNumberGrid");
-      grid.innerHTML = "";
-
-      QUESTIONS.forEach((_, i) => {
-        const isCurrent = i === state.currentIdx;
-        const isAnswered = state.answers[i] !== null;
-
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.setAttribute("data-q-idx", String(i));
-        btn.textContent = i + 1;
-
-        let cls = "grid-num-btn h-10 rounded-xl font-bold text-xs transition flex items-center justify-center cursor-pointer active:scale-95 ";
-        if (isCurrent) {
-          cls += "bg-blue-600 text-white ring-2 ring-blue-300 shadow";
-        } else if (isAnswered) {
-          cls += "bg-emerald-500 text-white hover:bg-emerald-600";
-        } else {
-          cls += "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100";
-        }
-        btn.className = cls;
-        btn.onclick = () => {
-          state.currentIdx = i;
-          closeQuestionGridModal();
-          renderCurrentQuestion();
-        };
-        grid.appendChild(btn);
-      });
     }
 
     function openQuestionGridModal() {
+      const grid = document.getElementById("questionNumberGrid");
+      grid.innerHTML = "";
+
+      QUESTIONS.forEach((_, idx) => {
+        const isAnswered = state.answers[idx] !== null;
+        const isCurrent = idx === state.currentIdx;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = idx + 1;
+        btn.className = `grid-num-btn py-2.5 rounded-xl font-extrabold text-xs border transition cursor-pointer ${
+          isCurrent
+            ? "bg-blue-600 text-white border-blue-700 shadow"
+            : isAnswered
+            ? "bg-emerald-500 text-white border-emerald-600"
+            : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+        }`;
+
+        btn.addEventListener("click", () => {
+          state.currentIdx = idx;
+          closeQuestionGridModal();
+          renderCurrentQuestion();
+        });
+
+        grid.appendChild(btn);
+      });
+
       const modal = document.getElementById("questionGridModal");
       modal.classList.remove("hidden");
       modal.classList.add("flex");
-      renderQuestionGrid();
     }
 
     function closeQuestionGridModal() {
@@ -2107,38 +2071,55 @@
     }
 
     function attemptManualSubmitExam() {
-      const unanswered = state.answers.reduce((acc, val, idx) => val === null ? [...acc, idx + 1] : acc, []);
-      if (unanswered.length > 0) {
+      const unansweredCount = state.answers.filter(a => a === null).length;
+      if (unansweredCount > 0) {
         showCustomModal({
-          title: "ADA SOAL BELUM TERJAWAB!",
-          message: `Masih ada ${unanswered.length} soal yang belum dikerjakan (contoh: No. ${unanswered.slice(0, 3).join(", ")} ${unanswered.length > 3 ? "..." : ""}).\nApakah Anda yakin ingin mengumpulkan ujian sekarang? Soal yang kosong akan dihitung salah.`,
-          type: "warning",
+          title: "Konfirmasi Selesai Ujian",
+          message: `Masih ada ${unansweredCount} soal yang belum Anda jawab.\n\nApakah Anda yakin ingin tetap mengumpulkan hasil ujian sekarang?`,
           confirmText: "YA, TETAP KUMPULKAN",
-          cancelText: "KEMBALI MENGERJAKAN",
-          onConfirm: () => {
-            finalizeAndSubmitExam(false);
-          }
+          cancelText: "Kembali Mengerjakan",
+          onConfirm: () => finalizeAndSubmitExam(false)
         });
       } else {
         showCustomModal({
-          title: "KONFIRMASI SELESAI UJIAN",
-          message: "Seluruh 50 soal sudah terjawab. Yakin ingin mengumpulkan jawaban dan melihat nilai akhir?",
-          type: "success",
-          confirmText: "YA, SELESAI & LIHAT NILAI",
-          cancelText: "BATAL",
-          onConfirm: () => {
-            finalizeAndSubmitExam(false);
-          }
+          title: "Kumpulkan Jawaban Ujian?",
+          message: "Semua 50 soal telah terjawab. Pastikan Anda sudah yakin sebelum mengakhiri ujian.",
+          confirmText: "✓ Ya, Selesai & Nilai",
+          cancelText: "Periksa Lagi",
+          onConfirm: () => finalizeAndSubmitExam(false)
         });
       }
     }
 
-    // =========================================================================
-    // 10. PENILAIAN, PEMBAHASAN & SINKRONISASI SPREADSHEET
-    // =========================================================================
-    function finalizeAndSubmitExam(isExpelled = false) {
+    function stopAndDownloadRecording() {
+      if (state.faceCheckInterval) {
+        clearInterval(state.faceCheckInterval);
+        state.faceCheckInterval = null;
+      }
+      try {
+        if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+          state.mediaRecorder.stop();
+        }
+      } catch (e) {}
+
+      try {
+        if (state.mediaStream) {
+          state.mediaStream.getTracks().forEach(track => track.stop());
+          state.mediaStream = null;
+        }
+      } catch (e) {}
+    }
+
+    async function finalizeAndSubmitExam(isExpelled = false) {
       if (state.phase === "result") return;
+      state.isSubmittingExam = true;
       state.phase = "result";
+
+      if (state.awayTimeoutId) {
+        clearTimeout(state.awayTimeoutId);
+        state.awayTimeoutId = null;
+      }
+      state.hiddenStartTime = null;
 
       if (state.timerInterval) {
         clearInterval(state.timerInterval);
@@ -2149,28 +2130,46 @@
       closeQuestionGridModal();
       stopAndDownloadRecording();
 
+      // Hitung nilai (50 soal x 2 poin = 100)
       let correct = 0;
-      let wrong = 0;
-      let empty = 0;
-
       QUESTIONS.forEach((q, idx) => {
-        const userAns = state.answers[idx];
-        if (userAns === null) {
-          empty++;
-        } else if (userAns === q.answer) {
-          correct++;
-        } else {
-          wrong++;
-        }
+        if (state.answers[idx] === q.answer) correct++;
       });
-
+      const wrong = QUESTIONS.length - correct;
       const finalScore = correct * 2;
 
+      // Simpan tanda sudah mengerjakan agar tidak bisa login 2x dengan nama + kelas sama
+      const normRecord = {
+        name: state.studentName.trim().toLowerCase(),
+        studentClass: state.studentClass.trim().toLowerCase()
+      };
+      state.completedRecords.push(normRecord);
+
+      try {
+        const localSaved = JSON.parse(localStorage.getItem("sas_completed_students") || "[]");
+        localSaved.push(normRecord);
+        localStorage.setItem("sas_completed_students", JSON.stringify(localSaved));
+      } catch (e) {}
+
+      try {
+        const fb = await window.__firebaseReady;
+        if (fb && fb.db) {
+          await fb.addDoc(fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "completed_exams"), {
+            name: state.studentName.trim(),
+            studentClass: state.studentClass.trim(),
+            score: finalScore,
+            violations: state.violations,
+            completedAt: new Date().toISOString()
+          });
+        }
+      } catch (e) {}
+
+      // Tampilkan hasil di UI
       document.getElementById("resStudentName").textContent = state.studentName;
       document.getElementById("resStudentClass").textContent = `Kelas ${state.studentClass} • Informatika`;
       document.getElementById("resFinalScore").textContent = finalScore;
       document.getElementById("resCorrectCount").textContent = correct;
-      document.getElementById("resWrongCount").textContent = wrong + empty;
+      document.getElementById("resWrongCount").textContent = wrong;
 
       const disqBanner = document.getElementById("disqualifiedBanner");
       if (isExpelled || state.disqualified) {
@@ -2179,40 +2178,19 @@
         disqBanner.classList.add("hidden");
       }
 
-      const vBadge = document.getElementById("resViolationBadge");
-      const vList = document.getElementById("resViolationList");
+      const violBadge = document.getElementById("resViolationBadge");
+      const violList = document.getElementById("resViolationList");
       if (state.violations > 0) {
-        vBadge.textContent = `${state.violations} Pelanggaran`;
-        vBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700";
-        vList.innerHTML = state.violationLogs
-          .map(
-            (log) =>
-              `<div class="p-2 rounded-xl bg-red-50 border border-red-200 text-red-800 font-medium text-[11px]">⚠️ ${log}</div>`
-          )
+        violBadge.textContent = `${state.violations} Pelanggaran`;
+        violBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700";
+        violList.innerHTML = state.violationLogs
+          .map(log => `<p class="text-red-700 font-medium bg-red-50 p-2 rounded-xl border border-red-100">⚠️ ${log}</p>`)
           .join("");
       } else {
-        vBadge.textContent = "0 Pelanggaran";
-        vBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700";
-        vList.innerHTML = `<p class="text-emerald-700 font-medium text-xs">✓ Ujian diselesaikan dengan jujur tanpa pelanggaran.</p>`;
+        violBadge.textContent = "0 Pelanggaran";
+        violBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700";
+        violList.innerHTML = `<p class="text-emerald-700 font-medium">✓ Ujian diselesaikan dengan jujur tanpa pelanggaran.</p>`;
       }
-
-      markParticipantCompleted({
-        name: state.studentName,
-        studentClass: state.studentClass,
-        score: finalScore,
-        violations: state.violations
-      });
-
-      syncResultToSpreadsheet({
-        nama: state.studentName,
-        kelas: state.studentClass,
-        mapel: state.subjectName,
-        benar: correct,
-        salah: wrong + empty,
-        nilai: finalScore,
-        jumlahPelanggaran: state.violations,
-        detailPelanggaran: state.violationLogs.length > 0 ? state.violationLogs.join(" | ") : "Bersih (0 pelanggaran)"
-      });
 
       document.getElementById("examSection").classList.add("hidden");
       document.getElementById("examSection").classList.remove("flex");
@@ -2220,403 +2198,114 @@
       resSec.classList.remove("hidden");
       resSec.classList.add("flex");
       window.scrollTo({ top: 0, behavior: "smooth" });
-    }
 
-    function normalizeText(str) {
-      return String(str || "").trim().toLowerCase().replace(/\s+/g, " ");
-    }
-
-    async function checkAlreadyCompleted(name, studentClass) {
-      const normName = normalizeText(name);
-      const normClass = normalizeText(studentClass);
-
-      const localMatch = state.completedRecords.find(
-        (r) => normName && r.name === normName && r.studentClass === normClass
-      );
-      if (localMatch) {
-        return `Siswa atas nama "${name}" (${studentClass}) sudah mengerjakan ujian 1 kali. Tidak diperbolehkan mengerjakan ulang.`;
-      }
-
-      try {
-        const fb = await window.__firebaseReady;
-        if (fb && fb.auth && fb.auth.currentUser) {
-          const colRef = fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "sas_informatika_8_attempts");
-          const snap = await fb.getDocs(colRef);
-          let foundReason = null;
-          snap.forEach((docSnap) => {
-            const d = docSnap.data();
-            if (normName && normalizeText(d.name) === normName && normalizeText(d.studentClass) === normClass) {
-              foundReason = `Siswa atas nama "${name}" (${studentClass}) sudah mengerjakan ujian 1 kali dan tidak dapat masuk lagi.`;
-            }
-          });
-          if (foundReason) return foundReason;
-        }
-      } catch (err) {}
-
-      return null;
-    }
-
-    async function markParticipantCompleted({ name, studentClass, score, violations }) {
-      const normName = normalizeText(name);
-      const normClass = normalizeText(studentClass);
-
-      state.completedRecords.push({
-        name: normName,
-        studentClass: normClass
+      // Kirim otomatis ke Google Spreadsheet jika URL sudah diatur
+      syncResultToSpreadsheet({
+        nama: state.studentName,
+        kelas: state.studentClass,
+        mapel: state.subjectName,
+        benar: correct,
+        salah: wrong,
+        nilai: finalScore,
+        jumlahPelanggaran: state.violations,
+        detailPelanggaran: state.violationLogs.length > 0 ? state.violationLogs.join(" | ") : "Tidak ada pelanggaran"
       });
 
-      try {
-        const fb = await window.__firebaseReady;
-        if (fb && fb.auth && fb.auth.currentUser) {
-          const colRef = fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "sas_informatika_8_attempts");
-          await fb.addDoc(colRef, {
-            name: normName,
-            studentClass: normClass,
-            score: score,
-            violations: violations,
-            completedAt: new Date().toISOString()
-          });
-        }
-      } catch (err) {}
+      // Beri jeda 2.5 detik setelah halaman hasil muncul agar transisi layar tidak memicu deteksi blur
+      setTimeout(() => {
+        state.isSubmittingExam = false;
+      }, 2500);
     }
 
-    async function syncResultToSpreadsheet(payloadData) {
+    async function syncResultToSpreadsheet(payload) {
       const statusEl = document.getElementById("spreadsheetSyncStatus");
       if (!state.spreadsheetUrl) {
-        statusEl.textContent = "ℹ️ URL Spreadsheet belum diatur (Gunakan tombol Unduh CSV).";
+        statusEl.textContent = "ℹ️ URL Spreadsheet belum diatur (nilai tersimpan di perangkat).";
         return;
       }
 
-      statusEl.textContent = "⏳ Mengirim nilai ke Google Spreadsheet...";
       try {
         await fetch(state.spreadsheetUrl, {
           method: "POST",
           mode: "no-cors",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payloadData)
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
         });
-        statusEl.textContent = "✓ Nilai & catatan pelanggaran terkirim ke Spreadsheet!";
+        statusEl.textContent = "✓ Nilai & catatan pengawasan berhasil dikirim ke Spreadsheet!";
         statusEl.className = "text-emerald-300 font-bold text-center";
       } catch (err) {
-        statusEl.textContent = "⚠️ Gagal koneksi Spreadsheet. Silakan unduh bukti CSV.";
-        statusEl.className = "text-amber-300 font-bold text-center";
+        statusEl.textContent = "⚠️ Gagal mengirim otomatis ke Spreadsheet. Silakan unduh CSV.";
+        statusEl.className = "text-amber-300 font-semibold text-center";
       }
     }
 
     function downloadStudentCsv() {
+      state.isSubmittingExam = true;
+      setTimeout(() => {
+        state.isSubmittingExam = false;
+      }, 2000);
+
       let correct = 0;
       QUESTIONS.forEach((q, idx) => {
         if (state.answers[idx] === q.answer) correct++;
       });
       const wrong = QUESTIONS.length - correct;
-      const score = correct * 2;
-      const detail = state.violationLogs.length > 0 ? state.violationLogs.join(" | ") : "Tidak ada pelanggaran";
+      const finalScore = correct * 2;
+      const detailPelanggaran = state.violationLogs.length > 0 ? state.violationLogs.join(" ; ") : "Tidak ada pelanggaran";
 
-      const headers = ["Waktu", "Nama Siswa", "Kelas", "Mata Pelajaran", "Benar", "Salah", "Nilai", "Jumlah Pelanggaran", "Detail Pelanggaran"];
-      const row = [
-        new Date().toLocaleString("id-ID"),
-        state.studentName,
-        state.studentClass,
-        state.subjectName,
-        correct,
-        wrong,
-        score,
-        state.violations,
-        detail
-      ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+      const csvRows = [
+        ["Waktu Selesai", "Nama Siswa", "Kelas", "Mata Pelajaran", "Benar", "Salah", "Nilai Akhir", "Jumlah Pelanggaran", "Keterangan"],
+        [
+          new Date().toLocaleString("id-ID"),
+          `"${state.studentName.replace(/"/g, '""')}"`,
+          `"${state.studentClass}"`,
+          `"${state.subjectName}"`,
+          correct,
+          wrong,
+          finalScore,
+          state.violations,
+          `"${detailPelanggaran.replace(/"/g, '""')}"`
+        ]
+      ];
 
-      const csvContent = "\uFEFF" + headers.join(",") + "\n" + row.join(",");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      const safeName = (state.studentName || "Siswa").replace(/[^a-zA-Z0-9]/g, "_");
-      a.href = url;
-      a.download = `Hasil_SAS_Informatika8_${safeName}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 800);
+      const csvContent = "data:text/csv;charset=utf-8," + csvRows.map(e => e.join(",")).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `Hasil_SAS_${state.studentClass.replace(/\s+/g, "")}_${state.studentName.replace(/\s+/g, "_")}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     function resetToLoginPage() {
       state.phase = "login";
       state.isStarting = false;
+      state.isSubmittingExam = false;
       state.currentIdx = 0;
       state.answers = new Array(QUESTIONS.length).fill(null);
-      state.remainingSeconds = 90 * 60;
       state.violations = 0;
       state.violationLogs = [];
       state.disqualified = false;
-      state.hiddenStartTime = null;
 
-      if (state.timerInterval) clearInterval(state.timerInterval);
-      if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
+      stopAndDownloadRecording();
       releaseBlackoutLock();
-      closeQuestionGridModal();
 
-      const submitBtn = document.getElementById("startExamSubmitBtn");
+      const btn = document.getElementById("startExamSubmitBtn");
       const btnText = document.getElementById("startExamBtnText");
-      if (submitBtn) submitBtn.disabled = false;
-      if (btnText) btnText.textContent = "MULAI UJIAN SEKARANG";
-
-      try {
-        if (document.fullscreenElement && document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-        }
-      } catch (err) {}
+      btn.disabled = false;
+      btnText.textContent = "MULAI UJIAN SEKARANG";
 
       document.getElementById("studentName").value = "";
       document.getElementById("studentClass").value = "";
-      document.getElementById("examSection").classList.add("hidden");
-      document.getElementById("examSection").classList.remove("flex");
+      document.getElementById("agreeRules").checked = false;
+
       document.getElementById("resultSection").classList.add("hidden");
       document.getElementById("resultSection").classList.remove("flex");
-      const loginSec = document.getElementById("loginSection");
-      loginSec.classList.remove("hidden");
-      loginSec.classList.add("flex");
+      document.getElementById("examSection").classList.add("hidden");
+      document.getElementById("examSection").classList.remove("flex");
+      document.getElementById("loginSection").classList.remove("hidden");
     }
-
-    // =========================================================================
-    // 11. INISIALISASI EVENT LISTENER UTAMA
-    // =========================================================================
-    document.addEventListener("DOMContentLoaded", () => {
-      setupAntiCheatListeners();
-      setupDraggableCamera();
-
-      // Mencegah reload halaman apabila pengguna menekan tombol Enter di dalam form
-      document.getElementById("startExamForm").addEventListener("submit", (e) => {
-        e.preventDefault();
-      });
-
-      // Form Mulai Ujian (Sekali isi langsung masuk & kunci pengulangan nama+kelas)
-      document.getElementById("startExamSubmitBtn").addEventListener("click", async (e) => {
-        e.preventDefault();
-        if (state.isStarting || state.phase === "exam") return;
-
-        const form = document.getElementById("startExamForm");
-        if (!form.checkValidity()) {
-          form.reportValidity();
-          return;
-        }
-
-        const submitBtn = document.getElementById("startExamSubmitBtn");
-        const btnText = document.getElementById("startExamBtnText");
-        const nameInput = document.getElementById("studentName").value.trim();
-        const classInput = document.getElementById("studentClass").value;
-        const subjectInput = document.getElementById("subjectName").value;
-        const agreeCheckbox = document.getElementById("agreeRules");
-
-        if (!nameInput || !classInput || !agreeCheckbox.checked) {
-          showCustomModal({
-            title: "DATA BELUM LENGKAP",
-            message: "Silakan isi Nama Lengkap, pilih Kelas, dan centang pernyataan persetujuan tata tertib.",
-            type: "warning",
-            confirmText: "LENGKAPI DATA"
-          });
-          return;
-        }
-
-        // Kunci tombol agar tidak terjadi klik ganda / pengulangan pengisian
-        state.isStarting = true;
-        submitBtn.disabled = true;
-        btnText.textContent = "MEMINTA IZIN & MEMERIKSA DATA...";
-
-        try {
-          // Cek apakah nama + kelas atau perangkat sudah pernah mengerjakan 1x
-          const duplicateReason = await checkAlreadyCompleted(nameInput, classInput);
-          if (duplicateReason) {
-            state.isStarting = false;
-            submitBtn.disabled = false;
-            btnText.textContent = "MULAI UJIAN SEKARANG";
-            showCustomModal({
-              title: "AKSES DITOLAK (SUDAH MENGERJAKAN)",
-              message: duplicateReason,
-              type: "danger",
-              confirmText: "MENGERTI"
-            });
-            return;
-          }
-
-          // Aktifkan AudioContext dari gestur klik pengguna
-          initAudioContext();
-
-          // Tahan fitur anti-kecurangan saat meminta izin dari browser
-          state.isRequestingPermissions = true;
-          await initCameraAndRecording();
-          
-          // Beri jeda 2 detik agar transisi layar setelah izin perangkat tidak terbaca sebagai pelanggaran blur/focus
-          setTimeout(() => {
-            state.isRequestingPermissions = false;
-          }, 2000);
-
-          state.studentName = nameInput;
-          state.studentClass = classInput;
-          state.subjectName = subjectInput;
-          state.phase = "exam";
-          state.currentIdx = 0;
-          state.answers = new Array(QUESTIONS.length).fill(null);
-          state.remainingSeconds = 90 * 60;
-          state.violations = 0;
-          state.violationLogs = [];
-
-          // Kunci riwayat browser agar tidak bisa tekan Back
-          history.pushState(null, "", location.href);
-
-          // Coba aktifkan fullscreen & kunci orientasi portrait tanpa menghambat masuk soal
-          try {
-            if (document.documentElement.requestFullscreen) {
-              document.documentElement.requestFullscreen().catch(() => {});
-            }
-            if (screen.orientation && screen.orientation.lock) {
-              screen.orientation.lock("portrait").catch(() => {});
-            }
-          } catch (err) {}
-
-          // Update header ruang ujian
-          document.getElementById("headerStudentName").textContent = state.studentName;
-          document.getElementById("headerStudentClass").textContent = `Kelas ${state.studentClass}`;
-          document.getElementById("violationCountText").textContent = `0/${state.maxViolations}`;
-          document.getElementById("violationCountText").className = "text-emerald-400";
-          document.getElementById("violationDot").className = "w-2 h-2 rounded-full bg-emerald-400";
-
-          // Pindah langsung ke halaman ujian
-          document.getElementById("loginSection").classList.add("hidden");
-          document.getElementById("loginSection").classList.remove("flex");
-          const examSec = document.getElementById("examSection");
-          examSec.classList.remove("hidden");
-          examSec.classList.add("flex");
-
-          // Mulai timer 90 menit, dan render soal ke-1
-          startExamTimer();
-          renderCurrentQuestion();
-        } finally {
-          state.isStarting = false;
-          submitBtn.disabled = false;
-          btnText.textContent = "MULAI UJIAN SEKARANG";
-        }
-      });
-
-      // Delegasi Klik Pilihan Jawaban (A, B, C, D)
-      document.getElementById("optionsContainer").addEventListener("click", (e) => {
-        const btn = e.target.closest(".option-choice-btn");
-        if (!btn) return;
-        const optIdx = parseInt(btn.getAttribute("data-opt-idx"), 10);
-        if (!isNaN(optIdx)) {
-          state.answers[state.currentIdx] = optIdx;
-          renderCurrentQuestion();
-        }
-      });
-
-      // Delegasi Klik Nomor pada Laci Daftar Soal (1-50)
-      document.getElementById("questionNumberGrid").addEventListener("click", (e) => {
-        const btn = e.target.closest(".grid-num-btn");
-        if (!btn) return;
-        const qIdx = parseInt(btn.getAttribute("data-q-idx"), 10);
-        if (!isNaN(qIdx)) {
-          state.currentIdx = qIdx;
-          closeQuestionGridModal();
-          renderCurrentQuestion();
-        }
-      });
-
-      // Buka / Tutup Laci Daftar Soal
-      document.getElementById("toggleGridDrawerBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        openQuestionGridModal();
-      });
-
-      document.getElementById("closeGridModalBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeQuestionGridModal();
-      });
-
-      document.getElementById("questionGridModal").addEventListener("click", (e) => {
-        if (e.target === document.getElementById("questionGridModal")) {
-          closeQuestionGridModal();
-        }
-      });
-
-      // Tombol Navigasi Sebelumnya
-      document.getElementById("prevQuestionBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (state.currentIdx > 0) {
-          state.currentIdx--;
-          renderCurrentQuestion();
-        }
-      });
-
-      // Tombol Navigasi Selanjutnya
-      document.getElementById("nextQuestionBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (state.currentIdx < QUESTIONS.length - 1) {
-          state.currentIdx++;
-          renderCurrentQuestion();
-        }
-      });
-
-      // Tombol Selesai Ujian (di soal ke-50 & di dalam laci daftar soal)
-      document.getElementById("finishExamBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        attemptManualSubmitExam();
-      });
-
-      document.getElementById("modalFinishExamBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        attemptManualSubmitExam();
-      });
-
-      // Tombol Kembali ke Halaman Login (dari Halaman Hasil)
-      document.getElementById("backToLoginBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        resetToLoginPage();
-      });
-
-      // Unduh CSV
-      document.getElementById("downloadCsvBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        downloadStudentCsv();
-      });
-
-      // Pengaturan Google Spreadsheet Modal
-      document.getElementById("appsScriptCodeBox").value = GOOGLE_APPS_SCRIPT_TEMPLATE;
-
-      document.getElementById("openSpreadsheetModalBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        document.getElementById("spreadsheetUrlInput").value = state.spreadsheetUrl;
-        const modal = document.getElementById("spreadsheetModal");
-        modal.classList.remove("hidden");
-        modal.classList.add("flex");
-      });
-
-      document.getElementById("closeSpreadsheetModalBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        const modal = document.getElementById("spreadsheetModal");
-        modal.classList.add("hidden");
-        modal.classList.remove("flex");
-      });
-
-      document.getElementById("saveSpreadsheetUrlBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        state.spreadsheetUrl = document.getElementById("spreadsheetUrlInput").value.trim();
-        const status = document.getElementById("urlSaveStatus");
-        status.classList.remove("hidden");
-        setTimeout(() => status.classList.add("hidden"), 2500);
-      });
-
-      document.getElementById("copyAppsScriptBtn").addEventListener("click", (e) => {
-        e.stopPropagation();
-        const box = document.getElementById("appsScriptCodeBox");
-        box.select();
-        document.execCommand("copy");
-        const btn = document.getElementById("copyAppsScriptBtn");
-        btn.textContent = "✓ Tersalin!";
-        setTimeout(() => {
-          btn.textContent = "Salin Kode";
-        }, 2000);
-      });
-    });
   </script>
 </body>
 </html>
