@@ -457,7 +457,7 @@
             </div>
             <div id="faceWarningOverlay" class="hidden absolute inset-0 bg-red-600/85 text-white flex flex-col items-center justify-center p-1.5 text-center">
               <span class="font-extrabold text-[9px] uppercase">WAJAH HILANG!</span>
-              <span id="faceCountdownText" class="text-base font-black">2</span>
+              <span id="faceCountdownText" class="text-base font-black">1</span>
             </div>
           </div>
         </div>
@@ -472,8 +472,8 @@
                   <span id="questionNumberBadge" class="px-3 py-1 rounded-xl bg-blue-600 text-white font-extrabold text-xs">
                     Soal No. 1
                   </span>
-                  <span id="questionBabLabel" class="text-[11px] font-bold text-slate-500 truncate max-w-[170px]">
-                    BAB 1
+                  <span id="questionBabLabel" class="text-[11px] font-bold text-slate-500">
+                    BAB 1 – Informatika
                   </span>
                 </div>
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 shrink-0">
@@ -1267,6 +1267,7 @@
       maxViolations: 4, // 3 peringatan, ke-4 otomatis dikeluarkan
       violationLogs: [],
       hiddenStartTime: null,
+      awayTimeoutId: null, // Timer real-time saat berada di luar tab > 2 detik
       lastViolationTimestamp: 0,
       disqualified: false,
 
@@ -1276,7 +1277,7 @@
       recordedChunks: [],
       cameraAvailable: false,
       faceCheckInterval: null,
-      faceMissingSeconds: 0,
+      faceMissingMs: 0,
       isCameraMinimized: false,
 
       // Integrasi Spreadsheet
@@ -1536,16 +1537,17 @@
 
     function startFacePresenceDetection(videoEl) {
       const canvas = document.createElement("canvas");
-      canvas.width = 48;
-      canvas.height = 64;
+      canvas.width = 64;
+      canvas.height = 80;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       let prevFrame = null;
       const overlay = document.getElementById("faceWarningOverlay");
       const countdownEl = document.getElementById("faceCountdownText");
 
-      state.faceMissingSeconds = 0;
+      state.faceMissingMs = 0;
       if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
 
+      // Pengecekan dipercepat setiap 500ms (0.5 detik) agar sensor lebih responsif
       state.faceCheckInterval = setInterval(async () => {
         if (state.phase !== "exam" || !state.cameraAvailable) return;
         if (videoEl.readyState < 2) return;
@@ -1560,31 +1562,56 @@
           } else {
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
             const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            let skinLikePixels = 0;
+            let centerSkinPixels = 0;
+            let totalCenterPixels = 0;
             let brightnessSum = 0;
+            let brightnessSqSum = 0;
             let motionDiff = 0;
 
-            for (let i = 0; i < frame.length; i += 4) {
-              const r = frame[i];
-              const g = frame[i + 1];
-              const b = frame[i + 2];
-              brightnessSum += (r + g + b) / 3;
+            for (let y = 0; y < canvas.height; y++) {
+              for (let x = 0; x < canvas.width; x++) {
+                const i = (y * canvas.width + x) * 4;
+                const r = frame[i];
+                const g = frame[i + 1];
+                const b = frame[i + 2];
+                const lum = (r + g + b) / 3;
+                brightnessSum += lum;
+                brightnessSqSum += lum * lum;
 
-              if (r > 65 && g > 35 && b > 20 && r > g && r > b && Math.abs(r - g) > 10) {
-                skinLikePixels++;
-              }
+                // Fokus deteksi pada area tengah frame tempat posisi wajah berada
+                const isCenterZone = x >= 12 && x <= 52 && y >= 10 && y <= 70;
+                if (isCenterZone) {
+                  totalCenterPixels++;
+                  if (
+                    r > 60 && g > 35 && b > 20 &&
+                    r > g && r > b &&
+                    Math.abs(r - g) > 12 &&
+                    (Math.max(r, g, b) - Math.min(r, g, b)) > 15
+                  ) {
+                    centerSkinPixels++;
+                  }
+                }
 
-              if (prevFrame) {
-                motionDiff += Math.abs(r - prevFrame[i]);
+                if (prevFrame) {
+                  motionDiff += Math.abs(r - prevFrame[i]);
+                }
               }
             }
 
             prevFrame = new Uint8ClampedArray(frame);
             const totalPixels = canvas.width * canvas.height;
             const avgBrightness = brightnessSum / totalPixels;
-            const skinRatio = skinLikePixels / totalPixels;
+            const variance = (brightnessSqSum / totalPixels) - (avgBrightness * avgBrightness);
+            const centerSkinRatio = totalCenterPixels > 0 ? (centerSkinPixels / totalCenterPixels) : 0;
 
-            if (avgBrightness > 22 && (skinRatio > 0.05 || motionDiff > 1200)) {
+            // Pastikan kamera tidak tertutup jari/gelap (avgBrightness > 28),
+            // bukan dinding polos (variance > 180), dan ada wajah di tengah atau gerakan nyata
+            if (
+              avgBrightness > 28 &&
+              avgBrightness < 245 &&
+              variance > 180 &&
+              (centerSkinRatio > 0.14 || (centerSkinRatio > 0.08 && motionDiff > 1800))
+            ) {
               faceDetected = true;
             }
           }
@@ -1593,21 +1620,22 @@
         }
 
         if (faceDetected) {
-          state.faceMissingSeconds = 0;
+          state.faceMissingMs = 0;
           overlay.classList.add("hidden");
         } else {
-          state.faceMissingSeconds++;
-          const sisa = Math.max(0, 2 - state.faceMissingSeconds);
+          state.faceMissingMs += 500;
+          const sisa = Math.max(0, Math.ceil((1000 - state.faceMissingMs) / 1000));
           countdownEl.textContent = sisa;
           overlay.classList.remove("hidden");
 
-          if (state.faceMissingSeconds >= 2) {
-            state.faceMissingSeconds = 0;
+          // Jika lebih dari 1 detik (1000ms) wajah tidak terdeteksi, alarm langsung menyala
+          if (state.faceMissingMs > 1000) {
+            state.faceMissingMs = 0;
             overlay.classList.add("hidden");
-            registerViolation("Wajah tidak terdeteksi di kamera selama 2 detik");
+            registerViolation("Wajah tidak terdeteksi di layar perekaman lebih dari 1 detik");
           }
         }
-      }, 1000);
+      }, 500);
     }
 
     // =========================================================================
@@ -1835,17 +1863,21 @@
         if (state.isRequestingPermissions) return; // Skip deteksi blur saat minta izin
         if (state.phase === "exam") {
           if (document.hidden) {
-            state.hiddenStartTime = Date.now();
-            triggerBlackoutLock("Anda meninggalkan layar ujian! Kembali sekarang atau pelanggaran dicatat.");
-          } else {
-            if (state.hiddenStartTime) {
-              const awayMs = Date.now() - state.hiddenStartTime;
-              state.hiddenStartTime = null;
-              if (awayMs > 2000) {
-                const detik = (awayMs / 1000).toFixed(1);
-                registerViolation(`Keluar aplikasi / pindah tab selama ${detik} detik (> 2 detik)`);
-              }
+            if (!state.hiddenStartTime) {
+              state.hiddenStartTime = Date.now();
+              triggerBlackoutLock("Anda meninggalkan layar ujian! Alarm akan menyala otomatis jika lebih dari 2 detik.");
+              clearTimeout(state.awayTimeoutId);
+              // Alarm langsung menyala saat berada di luar tab > 2 detik (tanpa menunggu siswa kembali)
+              state.awayTimeoutId = setTimeout(() => {
+                if (state.phase === "exam" && (document.hidden || state.hiddenStartTime)) {
+                  registerViolation("Berada di luar tab / aplikasi ujian lebih dari 2 detik");
+                }
+              }, 2050);
             }
+          } else {
+            clearTimeout(state.awayTimeoutId);
+            state.awayTimeoutId = null;
+            state.hiddenStartTime = null;
           }
         } else if (state.phase === "result" && document.hidden) {
           forceReturnToLoginOnResultScreenshot("Keluar layar / percobaan tangkapan layar saat melihat kunci jawaban!");
@@ -1857,6 +1889,13 @@
         if (state.phase === "exam") {
           if (!state.hiddenStartTime) {
             state.hiddenStartTime = Date.now();
+            clearTimeout(state.awayTimeoutId);
+            // Alarm langsung menyala jika jendela tidak fokus > 2 detik
+            state.awayTimeoutId = setTimeout(() => {
+              if (state.phase === "exam" && state.hiddenStartTime) {
+                registerViolation("Keluar aplikasi / membuka jendela lain lebih dari 2 detik");
+              }
+            }, 2050);
           }
           triggerBlackoutLock("Fokus aplikasi terganggu (notifikasi / split screen / tombol power+volume).");
         } else if (state.phase === "result") {
@@ -1866,13 +1905,10 @@
 
       window.addEventListener("focus", () => {
         if (state.isRequestingPermissions) return;
-        if (state.phase === "exam" && state.hiddenStartTime) {
-          const awayMs = Date.now() - state.hiddenStartTime;
+        if (state.phase === "exam") {
+          clearTimeout(state.awayTimeoutId);
+          state.awayTimeoutId = null;
           state.hiddenStartTime = null;
-          if (awayMs > 2000) {
-            const detik = (awayMs / 1000).toFixed(1);
-            registerViolation(`Keluar aplikasi / membuka jendela lain selama ${detik} detik`);
-          }
         }
       });
 
