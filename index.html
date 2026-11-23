@@ -1423,15 +1423,15 @@
 
       try {
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error("Perangkat tidak mendukung kamera/mikrofon.");
+          throw new Error("Perangkat tidak mendukung API kamera/mikrofon.");
         }
 
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: 160, max: 240 },
-            height: { ideal: 214, max: 320 },
-            frameRate: { ideal: 8, max: 12 }
+            width: { ideal: 240, max: 320 },
+            height: { ideal: 320, max: 480 },
+            frameRate: { ideal: 10, max: 15 }
           },
           audio: {
             echoCancellation: true,
@@ -1441,7 +1441,13 @@
 
         state.mediaStream = stream;
         state.cameraAvailable = true;
+        
+        // Memaksa pemutaran video secara eksplisit agar menyala di HP
         videoEl.srcObject = stream;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        await videoEl.play().catch(() => {});
+
         videoEl.classList.remove("hidden");
         fallbackInfo.classList.add("hidden");
         statusLabel.textContent = "REC";
@@ -1450,6 +1456,8 @@
         startLightweightMediaRecorder(stream);
         startFacePresenceDetection(videoEl);
       } catch (err) {
+        // Fallback Keringanan: Jika kamera bermasalah atau izin ditolak, tetap bisa ujian
+        console.warn("Kamera tidak dapat diakses, masuk ke mode keringanan:", err);
         state.cameraAvailable = false;
         videoEl.classList.add("hidden");
         fallbackInfo.classList.remove("hidden");
