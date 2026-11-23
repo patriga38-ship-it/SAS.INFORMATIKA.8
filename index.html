@@ -1,0 +1,2578 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SAS Informatika Kelas 8 - SMPN 38 Bandar Lampung</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    window.__firebaseReady = (async () => {
+      try {
+        if (typeof __firebase_config === "undefined") return null;
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== "undefined" ? __app_id : "sas-informatika-8";
+
+        if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+
+        return { auth, db, appId, collection, getDocs, addDoc };
+      } catch (err) {
+        return null;
+      }
+    })();
+  </script>
+  <style>
+    * {
+      font-family: 'Inter', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      overscroll-behavior: none;
+      background-color: #0f172a;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100dvh;
+    }
+
+    /* Frame Utama Mode Portrait Khusus Ponsel */
+    #portraitShell {
+      width: 100%;
+      max-width: 480px;
+      min-height: 100dvh;
+      margin: 0 auto;
+      background-color: #f1f5f9;
+      position: relative;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.55);
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Proteksi anti-seleksi teks dan anti-screenshot dasar */
+    .no-select {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* Efek blur saat kehilangan fokus / dicurigai screenshot */
+    .privacy-shield-active {
+      filter: blur(28px) brightness(0.15) !important;
+      pointer-events: none !important;
+      transition: filter 0.08s ease;
+    }
+
+    /* Watermark halus */
+    .watermark-overlay {
+      background-image: repeating-linear-gradient(
+        -30deg,
+        rgba(30, 58, 138, 0.035) 0px,
+        rgba(30, 58, 138, 0.035) 1px,
+        transparent 1px,
+        transparent 65px
+      );
+    }
+
+    /* Pastikan semua tombol dan pilihan interaktif selalu dapat diklik/disentuh */
+    button, select, input, label, .option-choice-btn, .grid-num-btn {
+      touch-action: manipulation;
+      pointer-events: auto;
+    }
+
+    /* Scrollbar ramping */
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 9999px;
+    }
+
+    @keyframes pulseBorder {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+    .violation-pulse {
+      animation: pulseBorder 1s infinite;
+    }
+
+    @media print {
+      body { display: none !important; }
+    }
+
+    /* Peringatan otomatis jika layar diputar ke Landscape pada ponsel */
+    @media screen and (orientation: landscape) and (max-height: 540px) {
+      #landscapeBlocker {
+        display: flex !important;
+      }
+    }
+  </style>
+</head>
+<body class="text-slate-800 no-select antialiased">
+
+  <!-- LAYAR PERINGATAN ORIENTASI LANDSCAPE -->
+  <div id="landscapeBlocker" class="fixed inset-0 z-[120] hidden bg-slate-950 text-white flex-col items-center justify-center p-6 text-center">
+    <div class="w-16 h-16 rounded-2xl bg-amber-500/20 border border-amber-400 text-amber-400 flex items-center justify-center mb-4">
+      <svg class="w-9 h-9 animate-bounce" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+      </svg>
+    </div>
+    <h2 class="text-lg font-extrabold tracking-wide uppercase text-amber-300 mb-2">Gunakan Posisi Tegak (Portrait)</h2>
+    <p class="text-xs text-slate-300 max-w-xs leading-relaxed">
+      Aplikasi ujian ini dikunci khusus dalam posisi <strong>Portrait (Berdiri)</strong>. Silakan putar kembali ponsel Anda ke posisi tegak untuk melanjutkan.
+    </p>
+  </div>
+
+  <!-- LAYAR BLOKIR GELAP SAAT MENDETEKSI PERCOBAAN SCREENSHOT / PINDAH APLIKASI -->
+  <div id="blackoutScreen" class="fixed inset-0 z-[100] hidden bg-black text-white flex-col items-center justify-center p-6 text-center">
+    <div class="w-16 h-16 rounded-full bg-red-600/20 border-2 border-red-500 flex items-center justify-center mb-4 animate-bounce">
+      <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      </svg>
+    </div>
+    <h2 class="text-lg font-extrabold tracking-wide text-red-400 uppercase mb-2">AKSES LAYAR DIKUNCI!</h2>
+    <p id="blackoutReason" class="text-xs text-slate-300 max-w-xs mb-6 leading-relaxed">
+      Terdeteksi aktivitas mencurigakan (percobaan screenshot, sentuhan 3 jari, atau keluar aplikasi).
+    </p>
+    <button type="button" id="resumeFromBlackoutBtn" class="px-6 py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold rounded-xl shadow-lg transition text-sm cursor-pointer">
+      Kembali ke Ujian
+    </button>
+  </div>
+
+  <!-- MODAL NOTIFIKASI & PERINGATAN KUSTOM -->
+  <div id="customModal" class="fixed inset-0 z-[90] hidden bg-slate-900/80 backdrop-blur-sm items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <div id="modalIconWrap" class="w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-amber-100 text-amber-600">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        </svg>
+      </div>
+      <h3 id="modalTitle" class="text-base font-extrabold text-center text-slate-900 mb-2">Peringatan Ujian</h3>
+      <p id="modalMessage" class="text-xs text-slate-600 text-center leading-relaxed mb-5 whitespace-pre-line"></p>
+      <div id="modalActions" class="flex flex-col gap-2">
+        <button type="button" id="modalConfirmBtn" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer">
+          Saya Mengerti
+        </button>
+        <button type="button" id="modalCancelBtn" class="hidden w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition cursor-pointer">
+          Batal
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL INTEGRASI GOOGLE SPREADSHEET & SCRIPT -->
+  <div id="spreadsheetModal" class="fixed inset-0 z-[85] hidden bg-slate-900/80 backdrop-blur-sm items-center justify-center p-3">
+    <div class="bg-white rounded-2xl max-w-md w-full max-h-[88dvh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+      <div class="px-4 py-3.5 bg-gradient-to-r from-emerald-700 to-teal-700 text-white flex items-center justify-between">
+        <div>
+          <h3 class="font-bold text-sm">Integrasi Google Spreadsheet</h3>
+          <p class="text-[11px] text-emerald-100">Rekap Otomatis Nilai & Pelanggaran</p>
+        </div>
+        <button type="button" id="closeSpreadsheetModalBtn" class="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer">
+          ✕
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-3 text-xs text-slate-700">
+        <div>
+          <label class="block font-bold text-slate-800 mb-1">URL Web App Google Apps Script:</label>
+          <input type="url" id="spreadsheetUrlInput" placeholder="https://script.google.com/macros/s/...../exec" class="w-full px-3 py-2.5 rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-xs" />
+          <div class="mt-2 flex items-center gap-2">
+            <button type="button" id="saveSpreadsheetUrlBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition cursor-pointer">
+              Simpan URL
+            </button>
+            <span id="urlSaveStatus" class="text-[11px] font-semibold text-emerald-600 hidden">✓ Tersimpan!</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5">
+          <h4 class="font-bold text-slate-900">Cara Menghubungkan ke Google Spreadsheet:</h4>
+          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600">
+            <li>Buka <strong>Google Spreadsheet</strong> baru di Google Drive.</li>
+            <li>Klik menu <strong>Ekstensi (Extensions) &rarr; Apps Script</strong>.</li>
+            <li>Hapus seluruh kode bawaan, lalu tempel kode di bawah ini.</li>
+            <li>Klik <strong>Terapkan (Deploy) &rarr; Deployment baru</strong>, pilih jenis <strong>Aplikasi web (Web app)</strong>.</li>
+            <li>Atur <em>Yang memiliki akses</em> menjadi <strong>Siapa saja (Anyone)</strong>, lalu salin URL Web App ke kolom di atas.</li>
+          </ol>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="font-bold text-slate-800">Kode Google Apps Script:</span>
+            <button type="button" id="copyAppsScriptBtn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-[11px] font-semibold cursor-pointer">
+              Salin Kode
+            </button>
+          </div>
+          <textarea id="appsScriptCodeBox" readonly rows="10" class="w-full p-2.5 rounded-xl bg-slate-900 text-emerald-300 font-mono text-[10px] leading-relaxed border border-slate-700 focus:outline-none"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LACI DAFTAR SOAL MINIMALIS (PORTRAIT BOTTOM SHEET) -->
+  <div id="questionGridModal" class="fixed inset-0 z-[75] hidden bg-slate-900/70 backdrop-blur-xs flex-col justify-end">
+    <div class="bg-white rounded-t-3xl w-full max-w-[480px] mx-auto max-h-[82dvh] flex flex-col shadow-2xl border-t border-slate-200 overflow-hidden">
+      <div class="w-10 h-1.5 bg-slate-300 rounded-full mx-auto mt-2.5"></div>
+      <div class="px-4 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
+        <div>
+          <h3 class="font-extrabold text-sm text-slate-800">Navigasi Nomor Soal (1–50)</h3>
+          <p class="text-[11px] text-slate-500">Ketuk nomor untuk melompat ke soal</p>
+        </div>
+        <button type="button" id="closeGridModalBtn" class="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold flex items-center justify-center cursor-pointer">
+          ✕
+        </button>
+      </div>
+      <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-around text-[11px] text-slate-600 font-semibold">
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span> Terjawab</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-blue-600 inline-block"></span> Aktif</span>
+        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-white border border-slate-300 inline-block"></span> Kosong</span>
+      </div>
+      <div class="p-3.5 overflow-y-auto">
+        <div id="questionNumberGrid" class="grid grid-cols-5 gap-2"></div>
+      </div>
+      <div class="p-3 bg-slate-50 border-t border-slate-200">
+        <button type="button" id="modalFinishExamBtn" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition cursor-pointer">
+          ✓ Selesai & Kumpulkan Semua Jawaban
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTAINER UTAMA MODE PORTRAIT -->
+  <div id="portraitShell">
+    <div id="mainAppContainer" class="flex-1 flex flex-col w-full">
+
+      <!-- ========================================================= -->
+      <!-- HALAMAN 1: LOGIN & TATA TERTIB UJIAN (PORTRAIT)           -->
+      <!-- ========================================================= -->
+      <section id="loginSection" class="flex-1 flex flex-col justify-between p-4 bg-gradient-to-b from-slate-900 via-blue-950 to-slate-900">
+        <!-- Header Identitas Sekolah -->
+        <div class="text-center text-white pt-2 pb-3">
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-[10px] font-bold tracking-wider uppercase mb-2">
+            <span>SMPN 38 BANDAR LAMPUNG</span>
+            <span>•</span>
+            <span>TP 2026–2027</span>
+          </div>
+          <h1 class="text-xl font-extrabold tracking-tight leading-snug">
+            SUMATIF AKHIR SEMESTER
+          </h1>
+          <p class="text-blue-200 text-xs font-medium mt-0.5">
+            Semester Ganjil • Kurikulum Merdeka
+          </p>
+        </div>
+
+        <!-- Kartu Form Login Siswa -->
+        <div class="bg-white rounded-3xl shadow-2xl p-4 sm:p-5 border border-slate-200 my-auto">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-3.5">
+            <div>
+              <h2 class="text-base font-extrabold text-slate-900">Identitas Peserta</h2>
+              <p class="text-[11px] text-slate-500">Isi data dengan benar (1x pengerjaan)</p>
+            </div>
+            <button type="button" id="openSpreadsheetModalBtn" class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer">
+              <span>⚙️ Spreadsheet</span>
+            </button>
+          </div>
+
+          <!-- Peringatan Tata Tertib Ketat -->
+          <div class="bg-red-50 border border-red-200 rounded-2xl p-3 mb-4 space-y-1.5">
+            <div class="flex items-center gap-1.5 text-red-700 font-extrabold text-[11px] uppercase">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <span>Aturan Wajib Ujian (Anti-Curang)</span>
+            </div>
+            <ul class="text-[11px] text-red-900/90 space-y-1 list-disc list-inside leading-snug">
+              <li><strong>Dilarang keras men-silent HP!</strong> Jika disilent, peserta didiskualifikasi.</li>
+              <li><strong>Dilarang screenshot</strong> (3 jari / tombol Power+Volume) atau pindah aplikasi (&gt;2 detik).</li>
+              <li><strong>Kamera &amp; Mikrofon aktif</strong> merekam ringan. Wajah wajib di layar (toleransi 2 detik). <em>(Perangkat rusak tetap diizinkan ujian).</em></li>
+              <li>Maksimal <strong>3x peringatan</strong>. Pelanggaran ke-4 otomatis dikeluarkan &amp; jawaban dikunci.</li>
+            </ul>
+          </div>
+
+          <form id="startExamForm" class="space-y-3">
+            <div>
+              <label for="studentName" class="block text-xs font-bold text-slate-700 mb-1">
+                Nama Lengkap Siswa <span class="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                id="studentName"
+                required
+                placeholder="Ketik nama lengkap Anda..."
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 outline-none text-sm font-medium transition"
+              />
+              <p class="text-[11px] text-slate-500 mt-1">* Setiap nama siswa hanya diperbolehkan mengerjakan 1 kali.</p>
+            </div>
+
+            <div class="space-y-3">
+              <div>
+                <label for="studentClass" class="block text-xs font-bold text-slate-700 mb-1">
+                  Kelas <span class="text-red-500">*</span>
+                </label>
+                <select
+                  id="studentClass"
+                  required
+                  class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 outline-none text-sm font-medium bg-white transition"
+                >
+                  <option value="">-- Pilih Kelas --</option>
+                  <option value="8 A">Kelas 8 A</option>
+                  <option value="8 B">Kelas 8 B</option>
+                  <option value="8 C">Kelas 8 C</option>
+                  <option value="8 D">Kelas 8 D</option>
+                </select>
+              </div>
+
+              <div>
+                <label for="subjectName" class="block text-xs font-bold text-slate-700 mb-1">
+                  Mata Pelajaran
+                </label>
+                <input
+                  type="text"
+                  id="subjectName"
+                  readonly
+                  value="INFORMATIKA (Kelas 8 - Semester Ganjil)"
+                  class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-700 text-xs font-bold outline-none"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 pt-1">
+              <div class="bg-blue-50 rounded-xl p-2 text-center border border-blue-100">
+                <span class="block text-[10px] text-blue-600 font-semibold">Soal</span>
+                <span class="text-xs font-extrabold text-blue-950">50 PG</span>
+              </div>
+              <div class="bg-indigo-50 rounded-xl p-2 text-center border border-indigo-100">
+                <span class="block text-[10px] text-indigo-600 font-semibold">Durasi</span>
+                <span class="text-xs font-extrabold text-indigo-950">90 Menit</span>
+              </div>
+              <div class="bg-emerald-50 rounded-xl p-2 text-center border border-emerald-100">
+                <span class="block text-[10px] text-emerald-600 font-semibold">Skor Maks</span>
+                <span class="text-xs font-extrabold text-emerald-950">100 Poin</span>
+              </div>
+            </div>
+
+            <!-- Checkbox Kesepakatan -->
+            <div class="flex items-start gap-2.5 mt-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <input type="checkbox" id="agreeRules" required class="mt-0.5 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-600 cursor-pointer">
+              <label for="agreeRules" class="text-[11px] text-slate-700 font-semibold leading-snug cursor-pointer">
+                Saya menyatakan siap mematuhi segala tata tertib ujian, tidak melakukan kecurangan, dan menerima sanksi jika melanggar.
+              </label>
+            </div>
+
+            <button
+              type="button"
+              id="startExamSubmitBtn"
+              class="w-full py-3.5 px-5 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 active:scale-[0.99] disabled:opacity-60 disabled:pointer-events-none text-white font-extrabold text-sm rounded-2xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span id="startExamBtnText">MULAI UJIAN SEKARANG</span>
+              <svg id="startExamBtnIcon" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          </form>
+        </div>
+
+        <p class="text-center text-slate-400 text-[10px] pt-3 pb-1">
+          &copy; 2026 SMPN 38 Bandar Lampung • Sistem Ujian Aman
+        </p>
+      </section>
+
+      <!-- ========================================================= -->
+      <!-- HALAMAN 2: RUANG UJIAN PORTRAIT ANTI-KECURANGAN           -->
+      <!-- ========================================================= -->
+      <section id="examSection" class="hidden flex-1 flex-col min-h-[100dvh] relative watermark-overlay">
+        <!-- Top Header Bar Ringkas Portrait -->
+        <header class="sticky top-0 z-40 bg-slate-900 text-white shadow-md px-3 py-2.5 border-b border-slate-800">
+          <!-- Baris 1: Identitas & Timer -->
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center font-extrabold text-xs shrink-0">
+                8
+              </div>
+              <div class="truncate">
+                <h1 id="headerStudentName" class="font-bold text-xs truncate text-white">Nama Siswa</h1>
+                <p id="headerStudentClass" class="text-[10px] text-blue-300 font-medium truncate">Kelas -</p>
+              </div>
+            </div>
+
+            <!-- Timer Hitung Mundur -->
+            <div id="timerBox" class="px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-1.5 shrink-0">
+              <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span id="timerDisplay" class="font-mono font-extrabold text-sm tracking-wider text-amber-300">90:00</span>
+            </div>
+          </div>
+
+          <!-- Baris 2: Status Pelanggaran & Tombol Daftar Soal -->
+          <div class="flex items-center justify-between gap-2">
+            <div id="violationBadge" class="px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 flex items-center gap-1.5 text-[11px] font-bold">
+              <span class="w-2 h-2 rounded-full bg-emerald-400" id="violationDot"></span>
+              <span class="text-slate-300">Pelanggaran:</span>
+              <span id="violationCountText" class="text-emerald-400">0/4</span>
+            </div>
+
+            <button type="button" id="toggleGridDrawerBtn" class="px-3 py-1 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-bold text-[11px] shadow flex items-center gap-1.5 transition cursor-pointer">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+              <span>Daftar Soal (<span id="answeredCountBadge">0/50</span>)</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- JENDELA KAMERA PENGAWAS MINI & FLEKSIBEL (PORTRAIT) -->
+        <div id="floatingCameraBox" style="bottom: 84px; right: 12px;" class="fixed z-30 w-[86px] bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-2xl border border-slate-700 overflow-hidden select-none cursor-move touch-none">
+          <div id="cameraDragHandle" class="px-2 py-1 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-1 min-w-0">
+              <span id="recIndicatorDot" class="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0"></span>
+              <span id="cameraStatusLabel" class="text-[9px] font-bold text-slate-200 truncate">REC</span>
+            </div>
+            <button type="button" id="toggleCameraMinimizeBtn" title="Perkecil / Perbesar" class="text-[10px] font-extrabold text-slate-300 hover:text-white px-1 rounded cursor-pointer">
+              —
+            </button>
+          </div>
+
+          <div id="cameraBodyWrap" class="relative aspect-[3/4] bg-slate-950 flex items-center justify-center overflow-hidden pointer-events-none">
+            <video id="proctorVideo" autoplay muted playsinline class="w-full h-full object-cover transform -scale-x-100"></video>
+            <div id="cameraFallbackInfo" class="hidden p-1.5 text-center text-[9px] text-amber-300 leading-tight">
+              Mode Keringanan
+            </div>
+            <div id="faceWarningOverlay" class="hidden absolute inset-0 bg-red-600/85 text-white flex flex-col items-center justify-center p-1.5 text-center">
+              <span class="font-extrabold text-[9px] uppercase">WAJAH HILANG!</span>
+              <span id="faceCountdownText" class="text-base font-black">2</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- AREA SOAL UTAMA (PORTRAIT) -->
+        <main class="relative z-20 flex-1 w-full p-3 pb-28 flex flex-col">
+          <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-4 flex-1 flex flex-col justify-between">
+            <div>
+              <!-- Header Nomor Soal -->
+              <div class="flex items-center justify-between gap-2 pb-2.5 mb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                  <span id="questionNumberBadge" class="px-3 py-1 rounded-xl bg-blue-600 text-white font-extrabold text-xs">
+                    Soal No. 1
+                  </span>
+                  <span id="questionBabLabel" class="text-[11px] font-bold text-slate-500 truncate max-w-[170px]">
+                    BAB 1
+                  </span>
+                </div>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 shrink-0">
+                  2 Poin
+                </span>
+              </div>
+
+              <!-- Teks Pertanyaan -->
+              <div id="questionText" class="text-sm font-semibold text-slate-900 leading-relaxed mb-4">
+                Memuat soal...
+              </div>
+
+              <!-- Pilihan Jawaban A, B, C, D -->
+              <div id="optionsContainer" class="space-y-2.5">
+                <!-- Diisi dinamis oleh JS -->
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <!-- BILAH NAVIGASI BAWAH TETAP (THUMB-FRIENDLY PORTRAIT) -->
+        <footer class="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-3 py-2.5 shadow-[0_-4px_15px_rgba(0,0,0,0.08)]">
+          <div class="flex items-center justify-between gap-2">
+            <button type="button" id="prevQuestionBtn" class="flex-1 py-3 px-3 rounded-2xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-800 font-bold text-xs transition flex items-center justify-center gap-1 disabled:opacity-40 cursor-pointer">
+              <span>&larr; Sebelumnya</span>
+            </button>
+
+            <button type="button" id="nextQuestionBtn" class="flex-1 py-3 px-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-xs shadow shadow-blue-600/20 transition flex items-center justify-center gap-1 cursor-pointer">
+              <span>Selanjutnya &rarr;</span>
+            </button>
+
+            <button type="button" id="finishExamBtn" class="hidden flex-1 py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow shadow-emerald-600/25 transition items-center justify-center gap-1 cursor-pointer">
+              <span>✓ Selesai Ujian</span>
+            </button>
+          </div>
+        </footer>
+      </section>
+
+      <!-- ========================================================= -->
+      <!-- HALAMAN 3: HASIL, PEMBAHASAN & PELANGGARAN (ANTI-SS)      -->
+      <!-- ========================================================= -->
+      <section id="resultSection" class="hidden flex-1 flex-col min-h-[100dvh] bg-slate-100 relative watermark-overlay">
+        <!-- Top Bar Hasil -->
+        <header class="sticky top-0 z-30 bg-slate-900 text-white px-3.5 py-3 shadow-md flex items-center justify-between gap-2">
+          <div>
+            <h1 class="font-extrabold text-xs tracking-wide uppercase">Hasil &amp; Pembahasan</h1>
+            <p class="text-[10px] text-amber-300 font-medium">Dilarang screenshot halaman ini!</p>
+          </div>
+          <button type="button" id="backToLoginBtn" class="px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-bold text-[11px] shadow transition cursor-pointer shrink-0">
+            &larr; Ke Login
+          </button>
+        </header>
+
+        <main class="w-full p-3 space-y-3.5 pb-10">
+          <!-- Banner Diskualifikasi Jika Melanggar 4x -->
+          <div id="disqualifiedBanner" class="hidden bg-red-600 text-white rounded-2xl p-4 shadow-lg border-2 border-red-300">
+            <h2 class="font-extrabold text-sm uppercase tracking-wide mb-1">
+              ⚠️ PELANGGARAN BATAS MAKSIMAL!
+            </h2>
+            <p class="text-xs leading-relaxed text-red-50">
+              KAMU DIKELUARKAN DARI APLIKASI KARENA TELAH MELAKUKAN PELANGGARAN DI BATAS MAKSIMAL TETAPI JAWABANMU TETAP DIREKAM DAN DINILAI SERTA DISIMPAN.
+            </p>
+          </div>
+
+          <!-- Kartu Skor Utama -->
+          <div class="bg-gradient-to-br from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-4 shadow-xl">
+            <div class="text-center border-b border-white/15 pb-3 mb-3">
+              <span class="inline-block px-2.5 py-0.5 rounded-full bg-white/15 text-[10px] font-bold uppercase tracking-wider mb-1">
+                SMPN 38 Bandar Lampung
+              </span>
+              <h2 id="resStudentName" class="text-lg font-extrabold truncate">Nama Siswa</h2>
+              <p id="resStudentClass" class="text-blue-200 text-xs font-medium">Kelas 8 - • Informatika</p>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="bg-white/10 rounded-2xl p-2.5">
+                <span class="block text-[10px] text-blue-200">Nilai Akhir</span>
+                <span id="resFinalScore" class="text-2xl font-black text-amber-300">0</span>
+              </div>
+              <div class="bg-emerald-500/20 border border-emerald-400/30 rounded-2xl p-2.5">
+                <span class="block text-[10px] text-emerald-200">Benar</span>
+                <span id="resCorrectCount" class="text-xl font-extrabold text-emerald-300">0</span>
+              </div>
+              <div class="bg-red-500/20 border border-red-400/30 rounded-2xl p-2.5">
+                <span class="block text-[10px] text-red-200">Salah</span>
+                <span id="resWrongCount" class="text-xl font-extrabold text-red-300">0</span>
+              </div>
+            </div>
+
+            <!-- Status Sinkronisasi Spreadsheet & Unduh CSV -->
+            <div class="mt-3 pt-3 border-t border-white/15 flex flex-col gap-2 text-[11px]">
+              <span id="spreadsheetSyncStatus" class="text-blue-200 font-medium text-center">
+                ⏳ Menyimpan rekap nilai...
+              </span>
+              <button type="button" id="downloadCsvBtn" class="w-full py-2.5 rounded-xl bg-white/15 hover:bg-white/25 font-bold text-white transition cursor-pointer">
+                📥 Unduh Bukti Nilai (CSV)
+              </button>
+            </div>
+          </div>
+
+          <!-- Riwayat Pelanggaran Siswa -->
+          <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-200">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="font-extrabold text-xs text-slate-900">Catatan Pengawasan</h3>
+              <span id="resViolationBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700">
+                0 Pelanggaran
+              </span>
+            </div>
+            <div id="resViolationList" class="text-xs text-slate-600 space-y-1.5">
+              <p class="text-emerald-700 font-medium">✓ Ujian diselesaikan dengan jujur tanpa pelanggaran.</p>
+            </div>
+          </div>
+        </main>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. BANK 50 SOAL SAS INFORMATIKA KELAS 8 SEMESTER GANJIL + PEMBAHASAN
+    // =========================================================================
+    const QUESTIONS = [
+      // BAB 1 – Informatika dan Pembelajarannya (1-8)
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Informatika adalah ilmu yang mempelajari tentang cara ....",
+        options: [
+          "Menggambar dan mewarnai gambar",
+          "Mengolah data menjadi informasi menggunakan teknologi",
+          "Membuat kerajinan tangan",
+          "Menghafalkan semua pelajaran"
+        ],
+        answer: 1,
+        reason: "Informatika berfokus pada studi, perancangan, dan pembuatan sistem komputasi untuk mengolah data menjadi informasi yang bermanfaat menggunakan teknologi."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Dalam mempelajari Informatika, siswa juga diajarkan untuk menggunakan teknologi secara ....",
+        options: [
+          "Sembarangan",
+          "Berlebihan",
+          "Bijak dan bertanggung jawab",
+          "Tanpa aturan"
+        ],
+        answer: 2,
+        reason: "Pembelajaran Informatika menanamkan etika digital agar siswa menggunakan teknologi secara bijak, aman, dan bertanggung jawab."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Berikut ini yang termasuk nilai Profil Pelajar Pancasila adalah ....",
+        options: [
+          "Malas dan tidak disiplin",
+          "Mandiri dan bernalar kritis",
+          "Egois dan tidak peduli",
+          "Mudah menyerah"
+        ],
+        answer: 1,
+        reason: "Enam dimensi Profil Pelajar Pancasila meliputi Beriman & Bertakwa, Berkebinekaan Global, Bergotong Royong, Mandiri, Bernalar Kritis, dan Kreatif."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Salah satu cara belajar Informatika yang efektif adalah ....",
+        options: [
+          "Hanya membaca tanpa mencoba",
+          "Menghindari kegiatan praktik",
+          "Belajar melalui latihan dan proyek",
+          "Tidak memperhatikan penjelasan guru"
+        ],
+        answer: 2,
+        reason: "Informatika merupakan ilmu terapan yang paling efektif dipahami melalui latihan pemecahan masalah dan pengerjaan proyek nyata."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Belajar Informatika melalui kasus nyata bertujuan agar siswa ....",
+        options: [
+          "Dapat menghubungkan materi dengan kehidupan sehari-hari",
+          "Tidak perlu memahami materi",
+          "Hanya menghafalkan teori",
+          "Tidak perlu melakukan praktik"
+        ],
+        answer: 0,
+        reason: "Studi kasus nyata membantu siswa melihat relevansi konsep komputasi dalam menyelesaikan persoalan kehidupan sehari-hari."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Mengapa minat dan motivasi penting dalam belajar Informatika?",
+        options: [
+          "Agar siswa tidak perlu mengerjakan tugas",
+          "Agar siswa lebih semangat dalam belajar",
+          "Agar siswa dapat meninggalkan pelajaran",
+          "Agar siswa tidak perlu bertanya"
+        ],
+        answer: 1,
+        reason: "Minat dan motivasi mendorong rasa ingin tahu dan ketekunan siswa dalam mengeksplorasi teknologi serta memecahkan masalah."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Salah satu hal yang dipelajari dalam Informatika kelas VIII adalah ....",
+        options: [
+          "Berpikir komputasional",
+          "Teknik memasak",
+          "Seni tari tradisional",
+          "Olahraga permainan"
+        ],
+        answer: 0,
+        reason: "Berpikir komputasional (Computational Thinking) merupakan fondasi utama dalam kurikulum Informatika SMP kelas VIII."
+      },
+      {
+        bab: "BAB 1 – Informatika",
+        q: "Kegiatan refleksi setelah pembelajaran bertujuan untuk ....",
+        options: [
+          "Mengetahui hal yang sudah dipahami dan yang masih sulit",
+          "Menghindari tugas sekolah",
+          "Mengurangi waktu belajar",
+          "Menghafalkan jawaban teman"
+        ],
+        answer: 0,
+        reason: "Refleksi membantu siswa mengevaluasi pemahaman diri sendiri sehingga dapat memperbaiki bagian materi yang belum dikuasai."
+      },
+
+      // BAB 2 – Berpikir Komputasional (9-23)
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Berpikir komputasional merupakan cara berpikir untuk menyelesaikan masalah secara ....",
+        options: [
+          "Acak dan tidak teratur",
+          "Sistematis, logis, dan efisien",
+          "Terburu-buru",
+          "Tanpa perencanaan"
+        ],
+        answer: 1,
+        reason: "Berpikir komputasional melatih penyusunan solusi yang terstruktur (sistematis), masuk akal (logis), dan hemat sumber daya (efisien)."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Himpunan adalah ....",
+        options: [
+          "Kumpulan objek yang didefinisikan secara jelas",
+          "Kumpulan benda yang tidak beraturan",
+          "Kumpulan angka secara acak",
+          "Kumpulan gambar tanpa nama"
+        ],
+        answer: 0,
+        reason: "Dalam matematika dan komputasi, himpunan adalah kumpulan objek atau elemen yang memiliki syarat keanggotaan yang jelas dan terdefinisi."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Berikut ini yang merupakan contoh himpunan buah-buahan adalah ....",
+        options: [
+          "Meja, kursi, lemari",
+          "Apel, pisang, jeruk",
+          "Pensil, buku, penggaris",
+          "Sepatu, sandal, tas"
+        ],
+        answer: 1,
+        reason: "Apel, pisang, dan jeruk adalah objek yang termasuk dalam kategori buah-buahan."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Fungsi adalah hubungan antara dua himpunan, di mana setiap anggota himpunan pertama dipasangkan dengan ....",
+        options: [
+          "Tidak memiliki pasangan",
+          "Tepat satu anggota himpunan kedua",
+          "Semua anggota himpunan kedua",
+          "Dua anggota secara bebas"
+        ],
+        answer: 1,
+        reason: "Definisi fungsi (pemetaan) mengharuskan setiap elemen di domain dipasangkan dengan tepat satu elemen di kodomain."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Dalam suatu fungsi, himpunan asal disebut ....",
+        options: [
+          "Kodomain",
+          "Domain",
+          "Range",
+          "Hasil"
+        ],
+        answer: 1,
+        reason: "Domain adalah daerah asal (input), Kodomain adalah daerah kawan, dan Range adalah daerah hasil (output)."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Sistem bilangan yang menggunakan dua simbol, yaitu 0 dan 1 disebut ....",
+        options: [
+          "Desimal",
+          "Oktal",
+          "Biner",
+          "Heksadesimal"
+        ],
+        answer: 2,
+        reason: "Sistem bilangan biner (basis 2) hanya menggunakan dua digit angka, yakni 0 dan 1, yang menjadi bahasa dasar komputer."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Sistem bilangan desimal menggunakan basis ....",
+        options: [
+          "2",
+          "8",
+          "10",
+          "16"
+        ],
+        answer: 2,
+        reason: "Sistem bilangan desimal menggunakan basis 10 dengan sepuluh simbol angka yaitu 0, 1, 2, 3, 4, 5, 6, 7, 8, dan 9."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Bilangan oktal menggunakan simbol angka ....",
+        options: [
+          "0 sampai 1",
+          "0 sampai 7",
+          "0 sampai 9",
+          "0 sampai 9 dan A sampai F"
+        ],
+        answer: 1,
+        reason: "Bilangan oktal adalah sistem bilangan basis 8 yang terdiri dari simbol angka 0, 1, 2, 3, 4, 5, 6, dan 7."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Hasil konversi bilangan desimal 5 ke biner adalah ....",
+        options: [
+          "100",
+          "101",
+          "110",
+          "111"
+        ],
+        answer: 1,
+        reason: "5 dibagi 2 = 2 sisa 1; 2 dibagi 2 = 1 sisa 0; 1 dibagi 2 = 0 sisa 1. Dibaca dari bawah menjadi 101 (4 + 0 + 1 = 5)."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Bilangan biner 1011 jika diubah menjadi desimal adalah ....",
+        options: [
+          "9",
+          "10",
+          "11",
+          "12"
+        ],
+        answer: 2,
+        reason: "(1 × 2³) + (0 × 2²) + (1 × 2¹) + (1 × 2⁰) = 8 + 0 + 2 + 1 = 11."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Hasil konversi bilangan desimal 8 ke bilangan oktal adalah ....",
+        options: [
+          "8",
+          "10",
+          "11",
+          "12"
+        ],
+        answer: 1,
+        reason: "8 dibagi 8 = 1 sisa 0; 1 dibagi 8 = 0 sisa 1. Dibaca dari bawah menjadi 10 dalam basis 8 (oktal)."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Algoritma adalah ....",
+        options: [
+          "Urutan langkah-langkah logis untuk menyelesaikan masalah",
+          "Kumpulan gambar pada komputer",
+          "Alat untuk menyimpan data",
+          "Program untuk menggambar"
+        ],
+        answer: 0,
+        reason: "Algoritma merupakan urutan instruksi atau langkah-langkah logis yang sistematis untuk menyelesaikan suatu permasalahan."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Urutan langkah yang benar ketika membuat minuman adalah ....",
+        options: [
+          "Minum, siapkan bahan, masak, selesai",
+          "Siapkan bahan, lakukan proses, sajikan",
+          "Sajikan, siapkan bahan, selesai",
+          "Selesai, masak, siapkan bahan"
+        ],
+        answer: 1,
+        reason: "Sesuai prinsip input-proses-output dalam algoritma: siapkan bahan (input), lakukan proses pembuatan (proses), lalu sajikan (output)."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Struktur data digunakan untuk ....",
+        options: [
+          "Menghapus seluruh data",
+          "Mengelompokkan dan menyimpan data agar mudah dikelola",
+          "Mematikan komputer",
+          "Mengubah warna layar"
+        ],
+        answer: 1,
+        reason: "Struktur data mengatur cara penyimpanan, pengorganisasian, dan pengelompokan data di memori agar dapat diakses dan diolah secara efisien."
+      },
+      {
+        bab: "BAB 2 – Berpikir Komputasional",
+        q: "Struktur data yang menggunakan prinsip LIFO (Last In First Out) adalah ....",
+        options: [
+          "Queue",
+          "Stack",
+          "Tree",
+          "Array"
+        ],
+        answer: 1,
+        reason: "Stack (tumpukan) bekerja dengan prinsip LIFO, yaitu data yang terakhir dimasukkan akan menjadi yang pertama kali dikeluarkan."
+      },
+
+      // BAB 3 – Teknologi Informasi dan Komunikasi (24-33)
+      {
+        bab: "BAB 3 – TIK",
+        q: "Aplikasi perkantoran merupakan aplikasi yang digunakan untuk membantu ....",
+        options: [
+          "Pekerjaan pengolahan dokumen dan informasi",
+          "Memperbaiki perangkat keras",
+          "Membersihkan komputer",
+          "Menghubungkan kabel listrik"
+        ],
+        answer: 0,
+        reason: "Aplikasi perkantoran (Office Suite) dirancang untuk memudahkan pembuatan dokumen teks, pengolahan angka/tabel, dan presentasi."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Aplikasi yang digunakan untuk membuat dan mengedit dokumen teks adalah ....",
+        options: [
+          "Microsoft Excel",
+          "Microsoft Word",
+          "Microsoft PowerPoint",
+          "Google Chrome"
+        ],
+        answer: 1,
+        reason: "Microsoft Word adalah perangkat lunak pengolah kata (word processor) untuk menyusun dan menyunting dokumen berbasis teks."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Microsoft Word biasanya digunakan untuk ....",
+        options: [
+          "Mengolah angka",
+          "Membuat presentasi",
+          "Membuat surat dan laporan",
+          "Mengedit video"
+        ],
+        answer: 2,
+        reason: "Fitur pemformatan paragraf, halaman, dan tata letak pada Microsoft Word sangat ideal untuk membuat surat resmi, makalah, dan laporan."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Aplikasi Microsoft Excel digunakan untuk ....",
+        options: [
+          "Mengolah angka dan data dalam bentuk tabel",
+          "Membuat animasi film",
+          "Mengedit suara",
+          "Menggambar bebas"
+        ],
+        answer: 0,
+        reason: "Microsoft Excel adalah aplikasi pengolah angka (spreadsheet) berbasis sel baris dan kolom untuk mengolah data tabel dan grafik."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Salah satu fungsi Microsoft Excel adalah ....",
+        options: [
+          "Membuat surat undangan",
+          "Menghitung data menggunakan rumus",
+          "Membuat video",
+          "Mengedit foto"
+        ],
+        answer: 1,
+        reason: "Keunggulan utama Microsoft Excel adalah kemampuannya melakukan perhitungan otomatis menggunakan rumus (formula) dan fungsi seperti SUM, AVERAGE, dan IF."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Microsoft PowerPoint merupakan aplikasi yang digunakan untuk membuat ....",
+        options: [
+          "Dokumen surat",
+          "Lembar kerja angka",
+          "Presentasi",
+          "Sistem operasi"
+        ],
+        answer: 2,
+        reason: "Microsoft PowerPoint adalah aplikasi pembuat bahan paparan/presentasi visual yang mendukung teks, gambar, audio, dan animasi."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Dalam Microsoft PowerPoint, halaman yang digunakan untuk menampilkan materi presentasi disebut ....",
+        options: [
+          "Folder",
+          "Slide",
+          "Sheet",
+          "Cell"
+        ],
+        answer: 1,
+        reason: "Lembar kerja pada aplikasi presentasi disebut Slide (sedangkan pada Excel disebut Sheet/Cell)."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Perintah Copy digunakan untuk ....",
+        options: [
+          "Menghapus dokumen",
+          "Menyalin teks atau objek",
+          "Memindahkan komputer",
+          "Menutup aplikasi"
+        ],
+        answer: 1,
+        reason: "Perintah Copy (Ctrl+C) menggandakan teks atau objek terpilih ke clipboard tanpa menghapus sumber aslinya."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Perintah Paste digunakan untuk ....",
+        options: [
+          "Menempelkan hasil salinan atau potongan",
+          "Menghapus teks",
+          "Mengubah ukuran layar",
+          "Menyimpan gambar"
+        ],
+        answer: 0,
+        reason: "Perintah Paste (Ctrl+V) meletakkan isi clipboard yang sebelumnya telah di-Copy atau di-Cut ke lokasi tujuan."
+      },
+      {
+        bab: "BAB 3 – TIK",
+        q: "Fitur Screenshot digunakan untuk ....",
+        options: [
+          "Mengambil gambar tampilan layar komputer",
+          "Menghapus file komputer",
+          "Mematikan komputer",
+          "Mengubah sistem operasi"
+        ],
+        answer: 0,
+        reason: "Screenshot (tangkapan layar) berfungsi merekam tampilan visual yang sedang aktif di layar perangkat menjadi file gambar."
+      },
+
+      // BAB 4 – Sistem Komputer (34-42)
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Sistem komputer merupakan kumpulan komponen yang bekerja sama untuk ....",
+        options: [
+          "Memasak makanan",
+          "Mengolah data menjadi informasi",
+          "Membersihkan ruangan",
+          "Menggambar di kertas"
+        ],
+        answer: 1,
+        reason: "Tujuan utama sistem komputer adalah menerima input data, memprosesnya, dan menghasilkan output berupa informasi."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Tiga komponen utama sistem komputer adalah ....",
+        options: [
+          "Monitor, keyboard, dan mouse",
+          "Hardware, software, dan brainware",
+          "CPU, meja, dan kursi",
+          "Printer, speaker, dan kabel"
+        ],
+        answer: 1,
+        reason: "Sistem komputer hanya dapat bekerja jika ketiga pilar utamanya hadir: perangkat keras (hardware), perangkat lunak (software), dan pengguna (brainware)."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Hardware adalah ....",
+        options: [
+          "Perangkat lunak komputer",
+          "Pengguna komputer",
+          "Perangkat keras komputer yang dapat dilihat dan disentuh",
+          "Data yang tersimpan di internet"
+        ],
+        answer: 2,
+        reason: "Hardware adalah komponen fisik komputer yang wujudnya nyata dapat dilihat dan disentuh secara langsung."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Berikut ini yang termasuk perangkat input adalah ....",
+        options: [
+          "Monitor",
+          "Speaker",
+          "Keyboard",
+          "Printer"
+        ],
+        answer: 2,
+        reason: "Keyboard berfungsi memasukkan perintah karakter/teks ke komputer. Monitor, speaker, dan printer adalah perangkat output."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Perangkat komputer yang berfungsi menampilkan hasil pengolahan data adalah ....",
+        options: [
+          "Keyboard",
+          "Mouse",
+          "Monitor",
+          "Scanner"
+        ],
+        answer: 2,
+        reason: "Monitor merupakan perangkat keluaran (output device) yang menampilkan hasil pemrosesan komputer secara visual."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Perangkat yang digunakan untuk menyimpan data komputer adalah ....",
+        options: [
+          "Speaker",
+          "SSD",
+          "Monitor",
+          "Keyboard"
+        ],
+        answer: 1,
+        reason: "SSD (Solid State Drive) adalah media penyimpanan data berkecepatan tinggi pada komputer modern."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Software adalah ....",
+        options: [
+          "Bagian komputer yang dapat disentuh",
+          "Kumpulan program atau instruksi untuk menjalankan komputer",
+          "Orang yang menggunakan komputer",
+          "Kabel penghubung komputer"
+        ],
+        answer: 1,
+        reason: "Software (perangkat lunak) adalah sekumpulan kode program atau instruksi digital yang mengatur cara kerja perangkat keras komputer."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Berikut ini yang merupakan contoh sistem operasi adalah ....",
+        options: [
+          "Microsoft Word",
+          "Microsoft Excel",
+          "Windows",
+          "PowerPoint"
+        ],
+        answer: 2,
+        reason: "Windows adalah sistem operasi (Operating System) yang mengelola seluruh sumber daya komputer, sedangkan Word, Excel, dan PowerPoint adalah perangkat lunak aplikasi."
+      },
+      {
+        bab: "BAB 4 – Sistem Komputer",
+        q: "Brainware adalah ....",
+        options: [
+          "Perangkat keras komputer",
+          "Perangkat lunak komputer",
+          "Orang yang menggunakan atau mengoperasikan komputer",
+          "Tempat menyimpan data"
+        ],
+        answer: 2,
+        reason: "Brainware merujuk pada manusia sebagai pengguna, operator, maupun pemrogram yang mengendalikan sistem komputer."
+      },
+
+      // BAB 5 – Jaringan Komputer dan Internet (43-50)
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Jaringan komputer adalah ....",
+        options: [
+          "Kumpulan komputer yang saling terhubung untuk berbagi data dan sumber daya",
+          "Kumpulan komputer yang tidak memiliki hubungan",
+          "Perangkat untuk mencetak dokumen",
+          "Program untuk menggambar"
+        ],
+        answer: 0,
+        reason: "Jaringan komputer menghubungkan dua atau lebih perangkat komputasi agar dapat bertukar data dan berbagi sumber daya (seperti printer atau koneksi internet)."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Salah satu manfaat jaringan komputer di sekolah adalah ....",
+        options: [
+          "Memperlambat pekerjaan",
+          "Memudahkan berbagi data dan informasi",
+          "Menghapus semua dokumen",
+          "Membuat komputer tidak dapat digunakan"
+        ],
+        answer: 1,
+        reason: "Jaringan komputer sekolah mempercepat distribusi materi belajar, pengumpulan tugas, dan akses informasi antar ruang."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "LAN merupakan singkatan dari ....",
+        options: [
+          "Local Area Network",
+          "Large Access Network",
+          "Long Area Number",
+          "Local Access Number"
+        ],
+        answer: 0,
+        reason: "LAN (Local Area Network) adalah jaringan komputer lokal yang mencakup area terbatas seperti satu ruang kelas, laboratorium, atau gedung sekolah."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Jaringan komputer yang memiliki jangkauan wilayah luas disebut ....",
+        options: [
+          "LAN",
+          "WAN",
+          "USB",
+          "CPU"
+        ],
+        answer: 1,
+        reason: "WAN (Wide Area Network) mencakup area geografis yang sangat luas, seperti antar kota, antar negara, hingga seluruh dunia."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Perangkat jaringan yang berfungsi menghubungkan jaringan dan mengarahkan pengiriman data adalah ....",
+        options: [
+          "Keyboard",
+          "Printer",
+          "Router",
+          "Speaker"
+        ],
+        answer: 2,
+        reason: "Router bertugas menghubungkan dua atau lebih jaringan berbeda serta menentukan rute terbaik untuk meneruskan paket data."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "BTS dalam komunikasi data pada ponsel berfungsi untuk ....",
+        options: [
+          "Menghubungkan komunikasi ponsel dengan jaringan seluler",
+          "Mencetak dokumen",
+          "Menyimpan file komputer",
+          "Mengolah angka"
+        ],
+        answer: 0,
+        reason: "BTS (Base Transceiver Station) memancarkan dan menerima sinyal radio yang menghubungkan perangkat ponsel ke jaringan operator seluler."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Phishing merupakan tindakan ....",
+        options: [
+          "Mengamankan komputer dari virus",
+          "Penipuan untuk mencuri informasi pribadi seseorang",
+          "Mempercepat koneksi internet",
+          "Membuat dokumen digital"
+        ],
+        answer: 1,
+        reason: "Phishing adalah kejahatan siber berupa penyamaran sebagai pihak terpercaya guna menipu korban agar menyerahkan kata sandi, PIN, atau data sensitif."
+      },
+      {
+        bab: "BAB 5 – Jaringan & Internet",
+        q: "Salah satu cara menjaga keamanan ketika menggunakan internet adalah ....",
+        options: [
+          "Membagikan kata sandi kepada teman",
+          "Membuka semua tautan yang diterima",
+          "Menggunakan kata sandi yang kuat dan berbeda untuk setiap akun",
+          "Memberikan informasi pribadi kepada orang asing"
+        ],
+        answer: 2,
+        reason: "Kata sandi yang kuat (kombinasi huruf besar, kecil, angka, simbol) dan unik di tiap akun mencegah pembobolan berantai."
+      }
+    ];
+
+    // =========================================================================
+    // 2. KODE GOOGLE APPS SCRIPT UNTUK SPREADSHEET
+    // =========================================================================
+    const GOOGLE_APPS_SCRIPT_TEMPLATE = `function doPost(e) {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var data = JSON.parse(e.postData.contents);
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        "Waktu Selesai", "Nama Siswa", "Kelas", "Mata Pelajaran",
+        "Jumlah Benar", "Jumlah Salah", "Nilai Akhir",
+        "Jumlah Pelanggaran", "Keterangan Pelanggaran"
+      ]);
+    }
+
+    sheet.appendRow([
+      new Date().toLocaleString("id-ID"),
+      data.nama || "-",
+      data.kelas || "-",
+      data.mapel || "Informatika Kelas 8",
+      data.benar || 0,
+      data.salah || 0,
+      data.nilai || 0,
+      data.jumlahPelanggaran || 0,
+      data.detailPelanggaran || "Tidak ada pelanggaran"
+    ]);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "success" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: "error", message: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
+
+    // =========================================================================
+    // 3. STATE APLIKASI UJIAN (IN-MEMORY + FIRESTORE ANTI-REPEAT)
+    // =========================================================================
+    const state = {
+      phase: "login", // "login" | "exam" | "result"
+      isStarting: false,
+      isRequestingPermissions: false, // Mencegah pelanggaran saat browser minta izin
+      completedRecords: [], // { name, studentClass }
+      studentName: "",
+      studentClass: "",
+      subjectName: "INFORMATIKA (Kelas 8 - Semester Ganjil)",
+      currentIdx: 0,
+      answers: new Array(QUESTIONS.length).fill(null),
+      remainingSeconds: 90 * 60, // 90 menit
+      timerInterval: null,
+
+      // Anti-Kecurangan
+      violations: 0,
+      maxViolations: 4, // 3 peringatan, ke-4 otomatis dikeluarkan
+      violationLogs: [],
+      hiddenStartTime: null,
+      lastViolationTimestamp: 0,
+      disqualified: false,
+
+      // Kamera, Mikrofon & Deteksi Wajah
+      mediaStream: null,
+      mediaRecorder: null,
+      recordedChunks: [],
+      cameraAvailable: false,
+      faceCheckInterval: null,
+      faceMissingSeconds: 0,
+      isCameraMinimized: false,
+
+      // Integrasi Spreadsheet
+      spreadsheetUrl: "",
+
+      // Audio Alarm Web Audio API
+      audioCtx: null
+    };
+
+    // =========================================================================
+    // 4. SISTEM ALARM SUARA KERAS PENGAWAS (MENEMBUS MODE SILENT VIA MEDIA STREAM)
+    // =========================================================================
+    function initAudioContext() {
+      try {
+        if (!state.audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            state.audioCtx = new AudioContextClass();
+          }
+        }
+        if (state.audioCtx && state.audioCtx.state === "suspended") {
+          state.audioCtx.resume();
+        }
+      } catch (err) {}
+    }
+
+    function playLoudSupervisorAlarm(isFinalExpulsion = false) {
+      try {
+        initAudioContext();
+        if (state.audioCtx) {
+          const ctx = state.audioCtx;
+          const now = ctx.currentTime;
+          const duration = isFinalExpulsion ? 2.6 : 1.5;
+
+          const osc1 = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          const gainNode = ctx.createGain();
+
+          osc1.type = "sawtooth";
+          osc2.type = "square";
+
+          const cycles = isFinalExpulsion ? 6 : 4;
+          for (let i = 0; i < cycles; i++) {
+            const t = now + (i * duration) / cycles;
+            osc1.frequency.setValueAtTime(980, t);
+            osc1.frequency.linearRampToValueAtTime(1480, t + duration / (cycles * 2));
+            osc2.frequency.setValueAtTime(740, t);
+            osc2.frequency.linearRampToValueAtTime(1120, t + duration / (cycles * 2));
+          }
+
+          gainNode.gain.setValueAtTime(1.0, now);
+          gainNode.gain.setValueAtTime(1.0, now + duration - 0.1);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, now + duration);
+
+          osc1.connect(gainNode);
+          osc2.connect(gainNode);
+          gainNode.connect(ctx.destination);
+
+          osc1.start(now);
+          osc2.start(now);
+          osc1.stop(now + duration);
+          osc2.stop(now + duration);
+        }
+
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const msg = new SpeechSynthesisUtterance(
+            isFinalExpulsion
+              ? "Perhatian pengawas! Siswa melakukan pelanggaran batas maksimal dan dikeluarkan dari ujian."
+              : "Perhatian pengawas! Terdeteksi pelanggaran ujian pada perangkat siswa."
+          );
+          msg.lang = "id-ID";
+          msg.volume = 1.0;
+          msg.rate = 1.05;
+          msg.pitch = 1.1;
+          window.speechSynthesis.speak(msg);
+        }
+
+        if (navigator.vibrate) {
+          navigator.vibrate([400, 150, 400, 150, 600]);
+        }
+      } catch (err) {}
+    }
+
+    // =========================================================================
+    // 5. MODAL KUSTOM (PENGGANTI ALERT / CONFIRM)
+    // =========================================================================
+    function showCustomModal({ title, message, type = "warning", confirmText = "Saya Mengerti", cancelText = null, onConfirm = null }) {
+      const modal = document.getElementById("customModal");
+      const titleEl = document.getElementById("modalTitle");
+      const msgEl = document.getElementById("modalMessage");
+      const confirmBtn = document.getElementById("modalConfirmBtn");
+      const cancelBtn = document.getElementById("modalCancelBtn");
+      const iconWrap = document.getElementById("modalIconWrap");
+
+      titleEl.textContent = title;
+      msgEl.textContent = message;
+      confirmBtn.textContent = confirmText;
+
+      if (type === "danger") {
+        iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-red-100 text-red-600";
+        confirmBtn.className = "w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
+      } else if (type === "success") {
+        iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-emerald-100 text-emerald-600";
+        confirmBtn.className = "w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
+      } else {
+        iconWrap.className = "w-12 h-12 rounded-2xl mx-auto mb-3 flex items-center justify-center bg-amber-100 text-amber-600";
+        confirmBtn.className = "w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition cursor-pointer";
+      }
+
+      if (cancelText) {
+        cancelBtn.textContent = cancelText;
+        cancelBtn.classList.remove("hidden");
+      } else {
+        cancelBtn.classList.add("hidden");
+      }
+
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+
+      const closeModal = () => {
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      };
+
+      confirmBtn.onclick = () => {
+        closeModal();
+        if (typeof onConfirm === "function") onConfirm();
+      };
+
+      cancelBtn.onclick = () => {
+        closeModal();
+      };
+    }
+
+    // =========================================================================
+    // 6. KAMERA, MIKROFON RINGAN & DETEKSI WAJAH 3 DETIK
+    // =========================================================================
+    async function initCameraAndRecording() {
+      const videoEl = document.getElementById("proctorVideo");
+      const statusLabel = document.getElementById("cameraStatusLabel");
+      const recDot = document.getElementById("recIndicatorDot");
+      const fallbackInfo = document.getElementById("cameraFallbackInfo");
+
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Perangkat tidak mendukung kamera/mikrofon.");
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 160, max: 240 },
+            height: { ideal: 214, max: 320 },
+            frameRate: { ideal: 8, max: 12 }
+          },
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true
+          }
+        });
+
+        state.mediaStream = stream;
+        state.cameraAvailable = true;
+        videoEl.srcObject = stream;
+        videoEl.classList.remove("hidden");
+        fallbackInfo.classList.add("hidden");
+        statusLabel.textContent = "REC";
+        recDot.className = "w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0";
+
+        startLightweightMediaRecorder(stream);
+        startFacePresenceDetection(videoEl);
+      } catch (err) {
+        state.cameraAvailable = false;
+        videoEl.classList.add("hidden");
+        fallbackInfo.classList.remove("hidden");
+        statusLabel.textContent = "OFF";
+        recDot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0";
+      }
+    }
+
+    function startLightweightMediaRecorder(stream) {
+      try {
+        if (typeof MediaRecorder === "undefined") return;
+        state.recordedChunks = [];
+        const mimeTypes = [
+          "video/webm;codecs=vp8,opus",
+          "video/webm",
+          "video/mp4"
+        ];
+        let selectedMime = "";
+        for (const m of mimeTypes) {
+          if (MediaRecorder.isTypeSupported(m)) {
+            selectedMime = m;
+            break;
+          }
+        }
+
+        const options = {
+          videoBitsPerSecond: 120000,
+          audioBitsPerSecond: 24000
+        };
+        if (selectedMime) options.mimeType = selectedMime;
+
+        const recorder = new MediaRecorder(stream, options);
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            state.recordedChunks.push(e.data);
+          }
+        };
+        recorder.start(5000);
+        state.mediaRecorder = recorder;
+      } catch (err) {}
+    }
+
+    function stopAndDownloadRecording() {
+      try {
+        if (state.faceCheckInterval) {
+          clearInterval(state.faceCheckInterval);
+          state.faceCheckInterval = null;
+        }
+
+        if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+          state.mediaRecorder.onstop = () => {
+            if (state.recordedChunks.length > 0) {
+              const blob = new Blob(state.recordedChunks, { type: "video/webm" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              const safeName = (state.studentName || "Siswa").replace(/[^a-zA-Z0-9]/g, "_");
+              a.href = url;
+              a.download = `Rekaman_SAS_Inf8_${safeName}_${state.studentClass.replace(/\s+/g, "")}.webm`;
+              document.body.appendChild(a);
+              a.click();
+              setTimeout(() => {
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }, 1000);
+            }
+          };
+          state.mediaRecorder.stop();
+        }
+
+        if (state.mediaStream) {
+          state.mediaStream.getTracks().forEach((t) => t.stop());
+          state.mediaStream = null;
+        }
+      } catch (err) {}
+    }
+
+    function startFacePresenceDetection(videoEl) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 48;
+      canvas.height = 64;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      let prevFrame = null;
+      const overlay = document.getElementById("faceWarningOverlay");
+      const countdownEl = document.getElementById("faceCountdownText");
+
+      state.faceMissingSeconds = 0;
+      if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
+
+      state.faceCheckInterval = setInterval(async () => {
+        if (state.phase !== "exam" || !state.cameraAvailable) return;
+        if (videoEl.readyState < 2) return;
+
+        let faceDetected = false;
+
+        try {
+          if ("FaceDetector" in window) {
+            const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+            const faces = await detector.detect(videoEl);
+            faceDetected = faces && faces.length > 0;
+          } else {
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            const frame = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            let skinLikePixels = 0;
+            let brightnessSum = 0;
+            let motionDiff = 0;
+
+            for (let i = 0; i < frame.length; i += 4) {
+              const r = frame[i];
+              const g = frame[i + 1];
+              const b = frame[i + 2];
+              brightnessSum += (r + g + b) / 3;
+
+              if (r > 65 && g > 35 && b > 20 && r > g && r > b && Math.abs(r - g) > 10) {
+                skinLikePixels++;
+              }
+
+              if (prevFrame) {
+                motionDiff += Math.abs(r - prevFrame[i]);
+              }
+            }
+
+            prevFrame = new Uint8ClampedArray(frame);
+            const totalPixels = canvas.width * canvas.height;
+            const avgBrightness = brightnessSum / totalPixels;
+            const skinRatio = skinLikePixels / totalPixels;
+
+            if (avgBrightness > 22 && (skinRatio > 0.05 || motionDiff > 1200)) {
+              faceDetected = true;
+            }
+          }
+        } catch (err) {
+          faceDetected = true;
+        }
+
+        if (faceDetected) {
+          state.faceMissingSeconds = 0;
+          overlay.classList.add("hidden");
+        } else {
+          state.faceMissingSeconds++;
+          const sisa = Math.max(0, 2 - state.faceMissingSeconds);
+          countdownEl.textContent = sisa;
+          overlay.classList.remove("hidden");
+
+          if (state.faceMissingSeconds >= 2) {
+            state.faceMissingSeconds = 0;
+            overlay.classList.add("hidden");
+            registerViolation("Wajah tidak terdeteksi di kamera selama 2 detik");
+          }
+        }
+      }, 1000);
+    }
+
+    // =========================================================================
+    // 7. JENDELA KAMERA FLEKSIBEL (DRAGGABLE TOUCH & MOUSE)
+    // =========================================================================
+    function setupDraggableCamera() {
+      const box = document.getElementById("floatingCameraBox");
+      const minBtn = document.getElementById("toggleCameraMinimizeBtn");
+      const bodyWrap = document.getElementById("cameraBodyWrap");
+
+      minBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.isCameraMinimized = !state.isCameraMinimized;
+        if (state.isCameraMinimized) {
+          bodyWrap.classList.add("hidden");
+          box.style.width = "76px";
+          minBtn.textContent = "+";
+        } else {
+          bodyWrap.classList.remove("hidden");
+          box.style.width = "86px";
+          minBtn.textContent = "—";
+        }
+      });
+
+      let isDragging = false;
+      let startX = 0;
+      let startY = 0;
+      let initialLeft = 0;
+      let initialTop = 0;
+
+      const onDragStart = (clientX, clientY) => {
+        isDragging = true;
+        const rect = box.getBoundingClientRect();
+        box.style.right = "auto";
+        box.style.bottom = "auto";
+        box.style.left = rect.left + "px";
+        box.style.top = rect.top + "px";
+        startX = clientX;
+        startY = clientY;
+        initialLeft = rect.left;
+        initialTop = rect.top;
+      };
+
+      const onDragMove = (clientX, clientY) => {
+        if (!isDragging) return;
+        const dx = clientX - startX;
+        const dy = clientY - startY;
+        const maxLeft = window.innerWidth - box.offsetWidth - 4;
+        const maxTop = window.innerHeight - box.offsetHeight - 4;
+        const nextLeft = Math.min(Math.max(4, initialLeft + dx), Math.max(4, maxLeft));
+        const nextTop = Math.min(Math.max(4, initialTop + dy), Math.max(4, maxTop));
+        box.style.left = nextLeft + "px";
+        box.style.top = nextTop + "px";
+      };
+
+      const onDragEnd = () => {
+        isDragging = false;
+      };
+
+      box.addEventListener("mousedown", (e) => {
+        if (e.target === minBtn) return;
+        onDragStart(e.clientX, e.clientY);
+      });
+      window.addEventListener("mousemove", (e) => onDragMove(e.clientX, e.clientY));
+      window.addEventListener("mouseup", onDragEnd);
+
+      box.addEventListener("touchstart", (e) => {
+        if (e.target === minBtn) return;
+        if (e.touches.length === 1) {
+          onDragStart(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+      window.addEventListener("touchmove", (e) => {
+        if (isDragging && e.touches.length === 1) {
+          onDragMove(e.touches[0].clientX, e.touches[0].clientY);
+        }
+      }, { passive: true });
+      window.addEventListener("touchend", onDragEnd);
+    }
+
+    // =========================================================================
+    // 8. SISTEM ANTI-KECURANGAN (SCREENSHOT, 3 JARI, KELUAR TAB > 2 DETIK)
+    // =========================================================================
+    function triggerBlackoutLock(reasonText) {
+      const app = document.getElementById("mainAppContainer");
+      const blackout = document.getElementById("blackoutScreen");
+      const reasonEl = document.getElementById("blackoutReason");
+
+      app.classList.add("privacy-shield-active");
+      reasonEl.textContent = reasonText;
+      blackout.classList.remove("hidden");
+      blackout.classList.add("flex");
+    }
+
+    function releaseBlackoutLock() {
+      const app = document.getElementById("mainAppContainer");
+      const blackout = document.getElementById("blackoutScreen");
+      app.classList.remove("privacy-shield-active");
+      blackout.classList.add("hidden");
+      blackout.classList.remove("flex");
+    }
+
+    function registerViolation(reason) {
+      if (state.phase !== "exam") return;
+
+      const now = Date.now();
+      if (now - state.lastViolationTimestamp < 2500) return;
+      state.lastViolationTimestamp = now;
+
+      state.violations++;
+      const timeLabel = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      state.violationLogs.push(`[${timeLabel}] Pelanggaran #${state.violations}: ${reason}`);
+
+      const countText = document.getElementById("violationCountText");
+      const dot = document.getElementById("violationDot");
+      const badge = document.getElementById("violationBadge");
+
+      countText.textContent = `${state.violations}/${state.maxViolations}`;
+      countText.className = "text-red-400";
+      dot.className = "w-2 h-2 rounded-full bg-red-500 animate-ping";
+      badge.classList.add("violation-pulse", "border-red-500");
+
+      if (state.violations >= state.maxViolations) {
+        playLoudSupervisorAlarm(true);
+        state.disqualified = true;
+        releaseBlackoutLock();
+
+        showCustomModal({
+          title: "PELANGGARAN BATAS MAKSIMAL (4x)!",
+          message:
+            "KAMU DIKELUARKAN DARI APLIKASI KARENA TELAH MELAKUKAN PELANGGARAN DI BATAS MAKSIMAL TETAPI JAWABANMU TETAP DIREKAM DAN DINILAI SERTA DISIMPAN.",
+          type: "danger",
+          confirmText: "LIHAT HASIL & PELANGGARAN",
+          onConfirm: () => {
+            finalizeAndSubmitExam(true);
+          }
+        });
+
+        setTimeout(() => {
+          if (state.phase === "exam") {
+            const modal = document.getElementById("customModal");
+            modal.classList.add("hidden");
+            modal.classList.remove("flex");
+            finalizeAndSubmitExam(true);
+          }
+        }, 4500);
+      } else {
+        playLoudSupervisorAlarm(false);
+        const sisaKesempatan = state.maxViolations - state.violations;
+        showCustomModal({
+          title: `PERINGATAN PELANGGARAN KE-${state.violations} DARI 3!`,
+          message:
+            `Pelanggaran terdeteksi:\n"${reason}"\n\n` +
+            `Aplikasi tidak dapat dikeluarkan sebelum seluruh soal selesai dikerjakan.\n` +
+            `Sisa toleransi peringatan: ${sisaKesempatan - 1}x sebelum Anda otomatis dikeluarkan pada pelanggaran ke-4!`,
+          type: "danger",
+          confirmText: "KEMBALI KE SOAL UJIAN"
+        });
+      }
+    }
+
+    function setupAntiCheatListeners() {
+      document.addEventListener("contextmenu", (e) => {
+        if (state.phase !== "login") {
+          e.preventDefault();
+        }
+      });
+
+      document.addEventListener("copy", (e) => {
+        if (state.phase !== "login") {
+          e.preventDefault();
+          if (e.clipboardData) e.clipboardData.setData("text/plain", "");
+        }
+      });
+
+      document.addEventListener("touchstart", (e) => {
+        if (state.phase === "exam") {
+          if (e.touches && e.touches.length >= 3) {
+            triggerBlackoutLock("Terdeteksi sentuhan 3 jari (percobaan screenshot). Layar dikunci!");
+            registerViolation("Percobaan screenshot menggunakan gestur 3 jari");
+          }
+        } else if (state.phase === "result") {
+          if (e.touches && e.touches.length >= 3) {
+            forceReturnToLoginOnResultScreenshot("Terdeteksi sentuhan 3 jari di halaman jawaban!");
+          }
+        }
+      }, { passive: true });
+
+      document.addEventListener("keydown", (e) => {
+        const key = e.key || "";
+        const isScreenshotKey =
+          key === "PrintScreen" ||
+          e.keyCode === 44 ||
+          (e.metaKey && e.shiftKey) ||
+          (e.ctrlKey && e.shiftKey && (key.toLowerCase() === "s" || key.toLowerCase() === "i")) ||
+          (e.ctrlKey && (key.toLowerCase() === "p" || key.toLowerCase() === "u" || key.toLowerCase() === "s"));
+
+        if (state.phase === "exam") {
+          if (isScreenshotKey || key === "AudioVolumeDown" || key === "AudioVolumeUp") {
+            e.preventDefault();
+            try { navigator.clipboard.writeText(""); } catch (err) {}
+            triggerBlackoutLock("Tombol fisik / shortcut screenshot terdeteksi dan diblokir!");
+            registerViolation("Percobaan screenshot atau menekan kombinasi tombol perangkat");
+          }
+        } else if (state.phase === "result") {
+          if (isScreenshotKey || key === "AudioVolumeDown" || key === "AudioVolumeUp") {
+            e.preventDefault();
+            forceReturnToLoginOnResultScreenshot("Percobaan screenshot halaman jawaban terdeteksi!");
+          }
+        }
+      });
+
+      document.addEventListener("keyup", (e) => {
+        if (e.key === "PrintScreen" || e.keyCode === 44) {
+          if (state.phase === "exam") {
+            triggerBlackoutLock("Tangkapan layar (PrintScreen) diblokir sistem!");
+            registerViolation("Percobaan screenshot layar soal");
+          } else if (state.phase === "result") {
+            forceReturnToLoginOnResultScreenshot("Percobaan screenshot halaman jawaban!");
+          }
+        }
+      });
+
+      document.addEventListener("visibilitychange", () => {
+        if (state.isRequestingPermissions) return; // Skip deteksi blur saat minta izin
+        if (state.phase === "exam") {
+          if (document.hidden) {
+            state.hiddenStartTime = Date.now();
+            triggerBlackoutLock("Anda meninggalkan layar ujian! Kembali sekarang atau pelanggaran dicatat.");
+          } else {
+            if (state.hiddenStartTime) {
+              const awayMs = Date.now() - state.hiddenStartTime;
+              state.hiddenStartTime = null;
+              if (awayMs > 2000) {
+                const detik = (awayMs / 1000).toFixed(1);
+                registerViolation(`Keluar aplikasi / pindah tab selama ${detik} detik (> 2 detik)`);
+              }
+            }
+          }
+        } else if (state.phase === "result" && document.hidden) {
+          forceReturnToLoginOnResultScreenshot("Keluar layar / percobaan tangkapan layar saat melihat kunci jawaban!");
+        }
+      });
+
+      window.addEventListener("blur", () => {
+        if (state.isRequestingPermissions) return; // Skip deteksi blur saat minta izin
+        if (state.phase === "exam") {
+          if (!state.hiddenStartTime) {
+            state.hiddenStartTime = Date.now();
+          }
+          triggerBlackoutLock("Fokus aplikasi terganggu (notifikasi / split screen / tombol power+volume).");
+        } else if (state.phase === "result") {
+          forceReturnToLoginOnResultScreenshot("Terdeteksi gangguan layar / tombol screenshot pada halaman kunci jawaban!");
+        }
+      });
+
+      window.addEventListener("focus", () => {
+        if (state.isRequestingPermissions) return;
+        if (state.phase === "exam" && state.hiddenStartTime) {
+          const awayMs = Date.now() - state.hiddenStartTime;
+          state.hiddenStartTime = null;
+          if (awayMs > 2000) {
+            const detik = (awayMs / 1000).toFixed(1);
+            registerViolation(`Keluar aplikasi / membuka jendela lain selama ${detik} detik`);
+          }
+        }
+      });
+
+      window.addEventListener("popstate", () => {
+        if (state.phase === "exam") {
+          history.pushState(null, "", location.href);
+          registerViolation("Mencoba menekan tombol Kembali untuk keluar dari ujian");
+        }
+      });
+
+      document.getElementById("resumeFromBlackoutBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        releaseBlackoutLock();
+      });
+    }
+
+    function forceReturnToLoginOnResultScreenshot(reason) {
+      if (state.phase !== "result") return;
+      playLoudSupervisorAlarm(false);
+      resetToLoginPage();
+      showCustomModal({
+        title: "KEAMANAN HALAMAN HASIL AKTIF",
+        message: `${reason}\n\nDemi menjaga kerahasiaan soal dan kunci jawaban, Anda otomatis dikembalikan ke halaman login.`,
+        type: "danger",
+        confirmText: "MENGERTI"
+      });
+    }
+
+    // =========================================================================
+    // 9. TIMER UJIAN (90 MENIT) & RENDER SOAL
+    // =========================================================================
+    function startExamTimer() {
+      if (state.timerInterval) clearInterval(state.timerInterval);
+      updateTimerDisplay();
+
+      state.timerInterval = setInterval(() => {
+        if (state.phase !== "exam") return;
+        state.remainingSeconds--;
+        updateTimerDisplay();
+
+        if (state.remainingSeconds <= 0) {
+          clearInterval(state.timerInterval);
+          showCustomModal({
+            title: "WAKTU UJIAN HABIS!",
+            message: "Durasi pengerjaan 90 menit telah berakhir. Seluruh jawaban Anda otomatis dikumpulkan dan dinilai.",
+            type: "warning",
+            confirmText: "LIHAT HASIL NILAI",
+            onConfirm: () => finalizeAndSubmitExam(false)
+          });
+          setTimeout(() => {
+            if (state.phase === "exam") {
+              const modal = document.getElementById("customModal");
+              modal.classList.add("hidden");
+              modal.classList.remove("flex");
+              finalizeAndSubmitExam(false);
+            }
+          }, 3000);
+        }
+      }, 1000);
+    }
+
+    function updateTimerDisplay() {
+      const mins = Math.floor(Math.max(0, state.remainingSeconds) / 60);
+      const secs = Math.max(0, state.remainingSeconds) % 60;
+      const formatted = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+      const el = document.getElementById("timerDisplay");
+      el.textContent = formatted;
+
+      if (state.remainingSeconds <= 300) {
+        el.className = "font-mono font-extrabold text-sm tracking-wider text-red-400 animate-pulse";
+      } else {
+        el.className = "font-mono font-extrabold text-sm tracking-wider text-amber-300";
+      }
+    }
+
+    function renderCurrentQuestion() {
+      const idx = state.currentIdx;
+      const item = QUESTIONS[idx];
+      const letters = ["A", "B", "C", "D"];
+
+      document.getElementById("questionNumberBadge").textContent = `Soal No. ${idx + 1}`;
+      document.getElementById("questionBabLabel").textContent = item.bab;
+      document.getElementById("questionText").textContent = item.q;
+
+      const optionsContainer = document.getElementById("optionsContainer");
+      optionsContainer.innerHTML = "";
+
+      item.options.forEach((optText, optIdx) => {
+        const isSelected = state.answers[idx] === optIdx;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("data-opt-idx", String(optIdx));
+        btn.className = isSelected
+          ? "option-choice-btn w-full text-left p-3.5 rounded-2xl border-2 border-blue-600 bg-blue-50/90 text-blue-950 font-semibold shadow-sm transition flex items-start gap-3 cursor-pointer active:scale-[0.99]"
+          : "option-choice-btn w-full text-left p-3.5 rounded-2xl border-2 border-slate-200 hover:border-blue-300 hover:bg-slate-50 text-slate-800 font-medium transition flex items-start gap-3 cursor-pointer active:scale-[0.99]";
+
+        btn.innerHTML = `
+          <span class="pointer-events-none w-7 h-7 rounded-xl shrink-0 flex items-center justify-center font-extrabold text-xs ${
+            isSelected ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"
+          }">${letters[optIdx]}</span>
+          <span class="pointer-events-none text-xs leading-relaxed pt-1">${optText}</span>
+        `;
+        btn.onclick = () => {
+          state.answers[state.currentIdx] = optIdx;
+          renderCurrentQuestion();
+        };
+        optionsContainer.appendChild(btn);
+      });
+
+      const prevBtn = document.getElementById("prevQuestionBtn");
+      const nextBtn = document.getElementById("nextQuestionBtn");
+      const finishBtn = document.getElementById("finishExamBtn");
+      const modalFinishBtn = document.getElementById("modalFinishExamBtn");
+
+      prevBtn.disabled = idx === 0;
+
+      // Hitung jumlah soal yang sudah terjawab
+      const answeredCount = state.answers.filter((a) => a !== null).length;
+      const isAllAnswered = answeredCount === QUESTIONS.length;
+      document.getElementById("answeredCountBadge").textContent = `${answeredCount}/${QUESTIONS.length}`;
+
+      // TOMBOL SELESAI SELALU AKTIF (Bisa diklik walau belum lengkap)
+      finishBtn.disabled = false;
+      modalFinishBtn.disabled = false;
+
+      if (isAllAnswered) {
+        finishBtn.className = "flex-1 py-3 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs shadow shadow-emerald-600/25 transition flex items-center justify-center gap-1 cursor-pointer";
+        finishBtn.innerHTML = `<span>✓ Selesai Ujian</span>`;
+
+        modalFinishBtn.className = "w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow transition cursor-pointer";
+        modalFinishBtn.innerHTML = `✓ Selesai & Kumpulkan Semua Jawaban`;
+      } else {
+        finishBtn.className = "flex-1 py-3 px-3 rounded-2xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-extrabold text-xs shadow transition flex items-center justify-center gap-1 cursor-pointer";
+        finishBtn.innerHTML = `<span>Selesai (${answeredCount}/50)</span>`;
+
+        modalFinishBtn.className = "w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow transition cursor-pointer";
+        modalFinishBtn.innerHTML = `Selesai & Kumpulkan (${answeredCount}/50 Terjawab)`;
+      }
+
+      // Tampilkan tombol selesai HANYA di nomor terakhir (Soal 50)
+      if (idx === QUESTIONS.length - 1) {
+        nextBtn.classList.add("hidden");
+        finishBtn.classList.remove("hidden");
+        finishBtn.classList.add("flex");
+      } else {
+        nextBtn.classList.remove("hidden");
+        finishBtn.classList.add("hidden");
+        finishBtn.classList.remove("flex");
+      }
+
+      renderQuestionGrid();
+    }
+
+    function renderQuestionGrid() {
+      const grid = document.getElementById("questionNumberGrid");
+      grid.innerHTML = "";
+
+      QUESTIONS.forEach((_, i) => {
+        const isCurrent = i === state.currentIdx;
+        const isAnswered = state.answers[i] !== null;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("data-q-idx", String(i));
+        btn.textContent = i + 1;
+
+        let cls = "grid-num-btn h-10 rounded-xl font-bold text-xs transition flex items-center justify-center cursor-pointer active:scale-95 ";
+        if (isCurrent) {
+          cls += "bg-blue-600 text-white ring-2 ring-blue-300 shadow";
+        } else if (isAnswered) {
+          cls += "bg-emerald-500 text-white hover:bg-emerald-600";
+        } else {
+          cls += "bg-white border border-slate-300 text-slate-700 hover:bg-slate-100";
+        }
+        btn.className = cls;
+        btn.onclick = () => {
+          state.currentIdx = i;
+          closeQuestionGridModal();
+          renderCurrentQuestion();
+        };
+        grid.appendChild(btn);
+      });
+    }
+
+    function openQuestionGridModal() {
+      const modal = document.getElementById("questionGridModal");
+      modal.classList.remove("hidden");
+      modal.classList.add("flex");
+      renderQuestionGrid();
+    }
+
+    function closeQuestionGridModal() {
+      const modal = document.getElementById("questionGridModal");
+      modal.classList.add("hidden");
+      modal.classList.remove("flex");
+    }
+
+    function attemptManualSubmitExam() {
+      const unanswered = state.answers.reduce((acc, val, idx) => val === null ? [...acc, idx + 1] : acc, []);
+      if (unanswered.length > 0) {
+        showCustomModal({
+          title: "ADA SOAL BELUM TERJAWAB!",
+          message: `Masih ada ${unanswered.length} soal yang belum dikerjakan (contoh: No. ${unanswered.slice(0, 3).join(", ")} ${unanswered.length > 3 ? "..." : ""}).\nApakah Anda yakin ingin mengumpulkan ujian sekarang? Soal yang kosong akan dihitung salah.`,
+          type: "warning",
+          confirmText: "YA, TETAP KUMPULKAN",
+          cancelText: "KEMBALI MENGERJAKAN",
+          onConfirm: () => {
+            finalizeAndSubmitExam(false);
+          }
+        });
+      } else {
+        showCustomModal({
+          title: "KONFIRMASI SELESAI UJIAN",
+          message: "Seluruh 50 soal sudah terjawab. Yakin ingin mengumpulkan jawaban dan melihat nilai akhir?",
+          type: "success",
+          confirmText: "YA, SELESAI & LIHAT NILAI",
+          cancelText: "BATAL",
+          onConfirm: () => {
+            finalizeAndSubmitExam(false);
+          }
+        });
+      }
+    }
+
+    // =========================================================================
+    // 10. PENILAIAN, PEMBAHASAN & SINKRONISASI SPREADSHEET
+    // =========================================================================
+    function finalizeAndSubmitExam(isExpelled = false) {
+      if (state.phase === "result") return;
+      state.phase = "result";
+
+      if (state.timerInterval) {
+        clearInterval(state.timerInterval);
+        state.timerInterval = null;
+      }
+
+      releaseBlackoutLock();
+      closeQuestionGridModal();
+      stopAndDownloadRecording();
+
+      let correct = 0;
+      let wrong = 0;
+      let empty = 0;
+
+      QUESTIONS.forEach((q, idx) => {
+        const userAns = state.answers[idx];
+        if (userAns === null) {
+          empty++;
+        } else if (userAns === q.answer) {
+          correct++;
+        } else {
+          wrong++;
+        }
+      });
+
+      const finalScore = correct * 2;
+
+      document.getElementById("resStudentName").textContent = state.studentName;
+      document.getElementById("resStudentClass").textContent = `Kelas ${state.studentClass} • Informatika`;
+      document.getElementById("resFinalScore").textContent = finalScore;
+      document.getElementById("resCorrectCount").textContent = correct;
+      document.getElementById("resWrongCount").textContent = wrong + empty;
+
+      const disqBanner = document.getElementById("disqualifiedBanner");
+      if (isExpelled || state.disqualified) {
+        disqBanner.classList.remove("hidden");
+      } else {
+        disqBanner.classList.add("hidden");
+      }
+
+      const vBadge = document.getElementById("resViolationBadge");
+      const vList = document.getElementById("resViolationList");
+      if (state.violations > 0) {
+        vBadge.textContent = `${state.violations} Pelanggaran`;
+        vBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-100 text-red-700";
+        vList.innerHTML = state.violationLogs
+          .map(
+            (log) =>
+              `<div class="p-2 rounded-xl bg-red-50 border border-red-200 text-red-800 font-medium text-[11px]">⚠️ ${log}</div>`
+          )
+          .join("");
+      } else {
+        vBadge.textContent = "0 Pelanggaran";
+        vBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700";
+        vList.innerHTML = `<p class="text-emerald-700 font-medium text-xs">✓ Ujian diselesaikan dengan jujur tanpa pelanggaran.</p>`;
+      }
+
+      markParticipantCompleted({
+        name: state.studentName,
+        studentClass: state.studentClass,
+        score: finalScore,
+        violations: state.violations
+      });
+
+      syncResultToSpreadsheet({
+        nama: state.studentName,
+        kelas: state.studentClass,
+        mapel: state.subjectName,
+        benar: correct,
+        salah: wrong + empty,
+        nilai: finalScore,
+        jumlahPelanggaran: state.violations,
+        detailPelanggaran: state.violationLogs.length > 0 ? state.violationLogs.join(" | ") : "Bersih (0 pelanggaran)"
+      });
+
+      document.getElementById("examSection").classList.add("hidden");
+      document.getElementById("examSection").classList.remove("flex");
+      const resSec = document.getElementById("resultSection");
+      resSec.classList.remove("hidden");
+      resSec.classList.add("flex");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function normalizeText(str) {
+      return String(str || "").trim().toLowerCase().replace(/\s+/g, " ");
+    }
+
+    async function checkAlreadyCompleted(name, studentClass) {
+      const normName = normalizeText(name);
+      const normClass = normalizeText(studentClass);
+
+      const localMatch = state.completedRecords.find(
+        (r) => normName && r.name === normName && r.studentClass === normClass
+      );
+      if (localMatch) {
+        return `Siswa atas nama "${name}" (${studentClass}) sudah mengerjakan ujian 1 kali. Tidak diperbolehkan mengerjakan ulang.`;
+      }
+
+      try {
+        const fb = await window.__firebaseReady;
+        if (fb && fb.auth && fb.auth.currentUser) {
+          const colRef = fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "sas_informatika_8_attempts");
+          const snap = await fb.getDocs(colRef);
+          let foundReason = null;
+          snap.forEach((docSnap) => {
+            const d = docSnap.data();
+            if (normName && normalizeText(d.name) === normName && normalizeText(d.studentClass) === normClass) {
+              foundReason = `Siswa atas nama "${name}" (${studentClass}) sudah mengerjakan ujian 1 kali dan tidak dapat masuk lagi.`;
+            }
+          });
+          if (foundReason) return foundReason;
+        }
+      } catch (err) {}
+
+      return null;
+    }
+
+    async function markParticipantCompleted({ name, studentClass, score, violations }) {
+      const normName = normalizeText(name);
+      const normClass = normalizeText(studentClass);
+
+      state.completedRecords.push({
+        name: normName,
+        studentClass: normClass
+      });
+
+      try {
+        const fb = await window.__firebaseReady;
+        if (fb && fb.auth && fb.auth.currentUser) {
+          const colRef = fb.collection(fb.db, "artifacts", fb.appId, "public", "data", "sas_informatika_8_attempts");
+          await fb.addDoc(colRef, {
+            name: normName,
+            studentClass: normClass,
+            score: score,
+            violations: violations,
+            completedAt: new Date().toISOString()
+          });
+        }
+      } catch (err) {}
+    }
+
+    async function syncResultToSpreadsheet(payloadData) {
+      const statusEl = document.getElementById("spreadsheetSyncStatus");
+      if (!state.spreadsheetUrl) {
+        statusEl.textContent = "ℹ️ URL Spreadsheet belum diatur (Gunakan tombol Unduh CSV).";
+        return;
+      }
+
+      statusEl.textContent = "⏳ Mengirim nilai ke Google Spreadsheet...";
+      try {
+        await fetch(state.spreadsheetUrl, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payloadData)
+        });
+        statusEl.textContent = "✓ Nilai & catatan pelanggaran terkirim ke Spreadsheet!";
+        statusEl.className = "text-emerald-300 font-bold text-center";
+      } catch (err) {
+        statusEl.textContent = "⚠️ Gagal koneksi Spreadsheet. Silakan unduh bukti CSV.";
+        statusEl.className = "text-amber-300 font-bold text-center";
+      }
+    }
+
+    function downloadStudentCsv() {
+      let correct = 0;
+      QUESTIONS.forEach((q, idx) => {
+        if (state.answers[idx] === q.answer) correct++;
+      });
+      const wrong = QUESTIONS.length - correct;
+      const score = correct * 2;
+      const detail = state.violationLogs.length > 0 ? state.violationLogs.join(" | ") : "Tidak ada pelanggaran";
+
+      const headers = ["Waktu", "Nama Siswa", "Kelas", "Mata Pelajaran", "Benar", "Salah", "Nilai", "Jumlah Pelanggaran", "Detail Pelanggaran"];
+      const row = [
+        new Date().toLocaleString("id-ID"),
+        state.studentName,
+        state.studentClass,
+        state.subjectName,
+        correct,
+        wrong,
+        score,
+        state.violations,
+        detail
+      ].map((v) => `"${String(v).replace(/"/g, '""')}"`);
+
+      const csvContent = "\uFEFF" + headers.join(",") + "\n" + row.join(",");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const safeName = (state.studentName || "Siswa").replace(/[^a-zA-Z0-9]/g, "_");
+      a.href = url;
+      a.download = `Hasil_SAS_Informatika8_${safeName}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 800);
+    }
+
+    function resetToLoginPage() {
+      state.phase = "login";
+      state.isStarting = false;
+      state.currentIdx = 0;
+      state.answers = new Array(QUESTIONS.length).fill(null);
+      state.remainingSeconds = 90 * 60;
+      state.violations = 0;
+      state.violationLogs = [];
+      state.disqualified = false;
+      state.hiddenStartTime = null;
+
+      if (state.timerInterval) clearInterval(state.timerInterval);
+      if (state.faceCheckInterval) clearInterval(state.faceCheckInterval);
+      releaseBlackoutLock();
+      closeQuestionGridModal();
+
+      const submitBtn = document.getElementById("startExamSubmitBtn");
+      const btnText = document.getElementById("startExamBtnText");
+      if (submitBtn) submitBtn.disabled = false;
+      if (btnText) btnText.textContent = "MULAI UJIAN SEKARANG";
+
+      try {
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } catch (err) {}
+
+      document.getElementById("studentName").value = "";
+      document.getElementById("studentClass").value = "";
+      document.getElementById("examSection").classList.add("hidden");
+      document.getElementById("examSection").classList.remove("flex");
+      document.getElementById("resultSection").classList.add("hidden");
+      document.getElementById("resultSection").classList.remove("flex");
+      const loginSec = document.getElementById("loginSection");
+      loginSec.classList.remove("hidden");
+      loginSec.classList.add("flex");
+    }
+
+    // =========================================================================
+    // 11. INISIALISASI EVENT LISTENER UTAMA
+    // =========================================================================
+    document.addEventListener("DOMContentLoaded", () => {
+      setupAntiCheatListeners();
+      setupDraggableCamera();
+
+      // Mencegah reload halaman apabila pengguna menekan tombol Enter di dalam form
+      document.getElementById("startExamForm").addEventListener("submit", (e) => {
+        e.preventDefault();
+      });
+
+      // Form Mulai Ujian (Sekali isi langsung masuk & kunci pengulangan nama+kelas)
+      document.getElementById("startExamSubmitBtn").addEventListener("click", async (e) => {
+        e.preventDefault();
+        if (state.isStarting || state.phase === "exam") return;
+
+        const form = document.getElementById("startExamForm");
+        if (!form.checkValidity()) {
+          form.reportValidity();
+          return;
+        }
+
+        const submitBtn = document.getElementById("startExamSubmitBtn");
+        const btnText = document.getElementById("startExamBtnText");
+        const nameInput = document.getElementById("studentName").value.trim();
+        const classInput = document.getElementById("studentClass").value;
+        const subjectInput = document.getElementById("subjectName").value;
+        const agreeCheckbox = document.getElementById("agreeRules");
+
+        if (!nameInput || !classInput || !agreeCheckbox.checked) {
+          showCustomModal({
+            title: "DATA BELUM LENGKAP",
+            message: "Silakan isi Nama Lengkap, pilih Kelas, dan centang pernyataan persetujuan tata tertib.",
+            type: "warning",
+            confirmText: "LENGKAPI DATA"
+          });
+          return;
+        }
+
+        // Kunci tombol agar tidak terjadi klik ganda / pengulangan pengisian
+        state.isStarting = true;
+        submitBtn.disabled = true;
+        btnText.textContent = "MEMINTA IZIN & MEMERIKSA DATA...";
+
+        try {
+          // Cek apakah nama + kelas atau perangkat sudah pernah mengerjakan 1x
+          const duplicateReason = await checkAlreadyCompleted(nameInput, classInput);
+          if (duplicateReason) {
+            state.isStarting = false;
+            submitBtn.disabled = false;
+            btnText.textContent = "MULAI UJIAN SEKARANG";
+            showCustomModal({
+              title: "AKSES DITOLAK (SUDAH MENGERJAKAN)",
+              message: duplicateReason,
+              type: "danger",
+              confirmText: "MENGERTI"
+            });
+            return;
+          }
+
+          // Aktifkan AudioContext dari gestur klik pengguna
+          initAudioContext();
+
+          // Tahan fitur anti-kecurangan saat meminta izin dari browser
+          state.isRequestingPermissions = true;
+          await initCameraAndRecording();
+          
+          // Beri jeda 2 detik agar transisi layar setelah izin perangkat tidak terbaca sebagai pelanggaran blur/focus
+          setTimeout(() => {
+            state.isRequestingPermissions = false;
+          }, 2000);
+
+          state.studentName = nameInput;
+          state.studentClass = classInput;
+          state.subjectName = subjectInput;
+          state.phase = "exam";
+          state.currentIdx = 0;
+          state.answers = new Array(QUESTIONS.length).fill(null);
+          state.remainingSeconds = 90 * 60;
+          state.violations = 0;
+          state.violationLogs = [];
+
+          // Kunci riwayat browser agar tidak bisa tekan Back
+          history.pushState(null, "", location.href);
+
+          // Coba aktifkan fullscreen & kunci orientasi portrait tanpa menghambat masuk soal
+          try {
+            if (document.documentElement.requestFullscreen) {
+              document.documentElement.requestFullscreen().catch(() => {});
+            }
+            if (screen.orientation && screen.orientation.lock) {
+              screen.orientation.lock("portrait").catch(() => {});
+            }
+          } catch (err) {}
+
+          // Update header ruang ujian
+          document.getElementById("headerStudentName").textContent = state.studentName;
+          document.getElementById("headerStudentClass").textContent = `Kelas ${state.studentClass}`;
+          document.getElementById("violationCountText").textContent = `0/${state.maxViolations}`;
+          document.getElementById("violationCountText").className = "text-emerald-400";
+          document.getElementById("violationDot").className = "w-2 h-2 rounded-full bg-emerald-400";
+
+          // Pindah langsung ke halaman ujian
+          document.getElementById("loginSection").classList.add("hidden");
+          document.getElementById("loginSection").classList.remove("flex");
+          const examSec = document.getElementById("examSection");
+          examSec.classList.remove("hidden");
+          examSec.classList.add("flex");
+
+          // Mulai timer 90 menit, dan render soal ke-1
+          startExamTimer();
+          renderCurrentQuestion();
+        } finally {
+          state.isStarting = false;
+          submitBtn.disabled = false;
+          btnText.textContent = "MULAI UJIAN SEKARANG";
+        }
+      });
+
+      // Delegasi Klik Pilihan Jawaban (A, B, C, D)
+      document.getElementById("optionsContainer").addEventListener("click", (e) => {
+        const btn = e.target.closest(".option-choice-btn");
+        if (!btn) return;
+        const optIdx = parseInt(btn.getAttribute("data-opt-idx"), 10);
+        if (!isNaN(optIdx)) {
+          state.answers[state.currentIdx] = optIdx;
+          renderCurrentQuestion();
+        }
+      });
+
+      // Delegasi Klik Nomor pada Laci Daftar Soal (1-50)
+      document.getElementById("questionNumberGrid").addEventListener("click", (e) => {
+        const btn = e.target.closest(".grid-num-btn");
+        if (!btn) return;
+        const qIdx = parseInt(btn.getAttribute("data-q-idx"), 10);
+        if (!isNaN(qIdx)) {
+          state.currentIdx = qIdx;
+          closeQuestionGridModal();
+          renderCurrentQuestion();
+        }
+      });
+
+      // Buka / Tutup Laci Daftar Soal
+      document.getElementById("toggleGridDrawerBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openQuestionGridModal();
+      });
+
+      document.getElementById("closeGridModalBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeQuestionGridModal();
+      });
+
+      document.getElementById("questionGridModal").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("questionGridModal")) {
+          closeQuestionGridModal();
+        }
+      });
+
+      // Tombol Navigasi Sebelumnya
+      document.getElementById("prevQuestionBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (state.currentIdx > 0) {
+          state.currentIdx--;
+          renderCurrentQuestion();
+        }
+      });
+
+      // Tombol Navigasi Selanjutnya
+      document.getElementById("nextQuestionBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (state.currentIdx < QUESTIONS.length - 1) {
+          state.currentIdx++;
+          renderCurrentQuestion();
+        }
+      });
+
+      // Tombol Selesai Ujian (di soal ke-50 & di dalam laci daftar soal)
+      document.getElementById("finishExamBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        attemptManualSubmitExam();
+      });
+
+      document.getElementById("modalFinishExamBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        attemptManualSubmitExam();
+      });
+
+      // Tombol Kembali ke Halaman Login (dari Halaman Hasil)
+      document.getElementById("backToLoginBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        resetToLoginPage();
+      });
+
+      // Unduh CSV
+      document.getElementById("downloadCsvBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        downloadStudentCsv();
+      });
+
+      // Pengaturan Google Spreadsheet Modal
+      document.getElementById("appsScriptCodeBox").value = GOOGLE_APPS_SCRIPT_TEMPLATE;
+
+      document.getElementById("openSpreadsheetModalBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("spreadsheetUrlInput").value = state.spreadsheetUrl;
+        const modal = document.getElementById("spreadsheetModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+      });
+
+      document.getElementById("closeSpreadsheetModalBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const modal = document.getElementById("spreadsheetModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      });
+
+      document.getElementById("saveSpreadsheetUrlBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        state.spreadsheetUrl = document.getElementById("spreadsheetUrlInput").value.trim();
+        const status = document.getElementById("urlSaveStatus");
+        status.classList.remove("hidden");
+        setTimeout(() => status.classList.add("hidden"), 2500);
+      });
+
+      document.getElementById("copyAppsScriptBtn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const box = document.getElementById("appsScriptCodeBox");
+        box.select();
+        document.execCommand("copy");
+        const btn = document.getElementById("copyAppsScriptBtn");
+        btn.textContent = "✓ Tersalin!";
+        setTimeout(() => {
+          btn.textContent = "Salin Kode";
+        }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>
